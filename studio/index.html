@@ -49,6 +49,13 @@
           <a class="btn btn-ghost" href="/library/">Get the library</a>
         </div>
       </section>
+
+      <div class="shot-frame">
+        <div class="shot">
+          <img src="/assets/img/studio-canvas-router.png" alt="TensorStudio showing a support-router agent as a hand-drawn graph: a Classify node with a conditional route to Billing, Tech, and Fallback, wired from start to end, each node showing typed ports." />
+        </div>
+        <p class="shot-cap">The real thing, running locally on <code>examples/support_router.py</code> — typed ports, a conditional route, wired <code>start</code>&nbsp;→&nbsp;<code>end</code>. Every edit writes straight back to the Python.</p>
+      </div>
     </div>
 
     <div class="container">
@@ -65,21 +72,12 @@
                  open one you already wrote and rearrange it.</p>
             </div>
           </div>
-          <div class="ascii" aria-hidden="true">  ┌─────────────┐         your_agent.py
-  │  + node     │      ┌────────────────────────┐
-  ├─────────────┤      │ class Plan(Node): ...   │
-  │  ● Plan      │◄────►│ class Research(Node):.. │
-  │   │          │ sync │ class Write(Node): ...  │
-  │  ● Research  │      │                         │
-  │   │          │      │ Graph(Desk)             │
-  │  ● Write     │      │   .add(Plan)            │
-  │   │          │      │   .edge(START,"Plan")   │
-  │  ● Review ◄─┐│      │   .conditional(...)     │
-  │   │        ││      │   .edge("Revise",       │
-  │  ● Revise ──┘│      │         "Review")       │
-  │   ▼          │      └────────────────────────┘
-  │  ● Publish   │       edits round-trip both ways
-  └─────────────┘</div>
+          <div>
+            <div class="shot">
+              <img src="/assets/img/studio-canvas.png" alt="A more complex agent — a research desk — drawn as a graph: Plan, Research, Write, Review, Revise and Publish nodes with a Review-to-Revise revision loop." />
+            </div>
+            <p class="shot-cap">A richer agent — a research desk with a <strong>Review&nbsp;→&nbsp;Revise</strong> loop — extracted straight from its Python.</p>
+          </div>
         </div>
       </section>
 

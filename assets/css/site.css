@@ -219,6 +219,14 @@ a.card:hover .go { gap: 10px; }
   font: 13px/1.45 var(--mono); white-space: pre;
 }
 
+/* ---------- screenshots ---------- */
+
+.shot { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: #f4f5f7; box-shadow: 0 24px 60px -24px rgba(0, 0, 0, .6); }
+.shot img { display: block; width: 100%; height: auto; }
+.shot-frame { max-width: 940px; margin: 0 auto; }
+.shot-cap { text-align: center; color: var(--faint); font-size: .9rem; margin-top: 14px; }
+.shot-cap code { color: var(--muted); }
+
 /* ---------- split (text + visual) ---------- */
 
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
