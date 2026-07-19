@@ -1,0 +1,10 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TensorSketch">
+  <!-- Placeholder mark: a tiny converging agent-graph. Replace with the real logo. -->
+  <g stroke="#7e88ff" stroke-width="2" stroke-linecap="round" opacity="0.9">
+    <path d="M8.5 8.5 L23 16" />
+    <path d="M8.5 23.5 L23 16" />
+  </g>
+  <circle cx="8.5" cy="8.5" r="3.4" fill="#7e88ff" />
+  <circle cx="8.5" cy="23.5" r="3.4" fill="#7e88ff" />
+  <circle cx="23" cy="16" r="4" fill="#5bd99a" />
+</svg>

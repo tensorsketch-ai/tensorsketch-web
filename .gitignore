@@ -1,0 +1,13 @@
+# Vercel
+.vercel
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Node (not used today, but just in case tooling is added)
+node_modules/
+npm-debug.log*

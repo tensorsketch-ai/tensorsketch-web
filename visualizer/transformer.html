@@ -1,0 +1,1792 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Model Graph - 3D Equation Visualizer</title>
+    <style>
+        :root {
+            --bg-0: #f4f5f7; --bg-1: #e9ebf0; --ink: #1c2230; --ink-dim: #5e6a7e; --line: #d4d9e2;
+            --weight: #7e88ff; --act: #5bd99a;
+            --mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, monospace;
+            --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
+            color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased;
+        }
+
+        #stage {
+            position: fixed; inset: 0; display: block; touch-action: none;
+            background: radial-gradient(900px 700px at 70% 8%, #fbfcfe 0%, rgba(251, 252, 254, 0) 60%),
+                        linear-gradient(180deg, var(--bg-0), var(--bg-1));
+        }
+
+        .hud { position: fixed; pointer-events: none; z-index: 5; }
+
+        .panel {
+            pointer-events: auto; background: rgba(255, 255, 255, .82);
+            border: 1px solid var(--line); border-radius: 12px;
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            box-shadow: 0 12px 36px -22px rgba(20, 30, 60, .4);
+        }
+
+        #title { top: 15px; left: 16px; max-width: min(40ch, 70vw); }
+        #title .w { padding: 12px 15px; }
+        #title .k { font-family: var(--mono); font-size: 10px; letter-spacing: .24em; text-transform: uppercase; color: #21a05a; }
+        #title h1 { margin: 3px 0 2px; font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+        #title p { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--ink-dim); }
+        #title code { font-family: var(--mono); color: #3b46d6; font-size: 11px; }
+
+        /* ---- Equation editor ---- */
+        #editor { left: 16px; top: 134px; width: 348px; max-width: 84vw; }
+        #editor .ehead { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px 8px; }
+        #editor .ehead .k { font-family: var(--mono); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: #3b46d6; }
+        #editor .etoggle { pointer-events: auto; cursor: pointer; font-family: var(--mono); font-size: 10px; color: var(--ink-dim);
+            border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; user-select: none; transition: .12s; }
+        #editor .etoggle:hover { color: var(--ink); border-color: #9fb0cc; background: #fff; }
+        #editor .etabs { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 10px 9px; }
+        #editor .etab {
+            pointer-events: auto; cursor: pointer; font-family: var(--mono); font-size: 10.5px;
+            color: var(--ink-dim); border: 1px solid var(--line); border-radius: 6px;
+            padding: 3px 9px; user-select: none; transition: .12s; background: rgba(255, 255, 255, .5);
+        }
+        #editor .etab:hover { color: var(--ink); border-color: #9fb0cc; background: #fff; }
+        #editor .etab[data-on="true"] { color: #fff; background: #3b46d6; border-color: #3b46d6; }
+        #editor .ecats { display: flex; flex-wrap: wrap; gap: 5px; padding: 2px 10px 8px; }
+        #editor .ecat {
+            pointer-events: auto; cursor: pointer; font-family: var(--mono); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase;
+            color: var(--ink-dim); border: 1px solid var(--line); border-radius: 20px; padding: 3px 9px; user-select: none; transition: .12s; background: rgba(255, 255, 255, .5);
+        }
+        #editor .ecat:hover { color: var(--ink); border-color: #9fb0cc; background: #fff; }
+        #editor .ecat[data-on="true"] { color: #fff; background: #1d2330; border-color: #1d2330; }
+        #editor .ecard { margin: 0 10px 9px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255, 255, 255, .55); font-family: var(--mono); font-size: 10px; color: var(--ink-dim); line-height: 1.5; }
+        #editor .ecard h4 { margin: 0; font-size: 12.5px; color: var(--ink); font-weight: 650; }
+        #editor .ecard .meta { margin-top: 1px; }
+        #editor .ecard .props { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+        #editor .ecard .prop { font-size: 9px; padding: 2px 6px; border-radius: 5px; background: #eef0ff; color: #3b46d6; border: 1px solid #d9ddfb; letter-spacing: .02em; }
+        #editor .ecard .blurb { margin-top: 6px; color: var(--ink); }
+        #editor .ecard:empty { display: none; }
+        #editor .esrcbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-family: var(--mono); font-size: 9.5px; color: var(--ink-dim); }
+        #editor .ecopy { pointer-events: auto; cursor: pointer; color: #3b46d6; border: 1px solid #d9ddfb; background: #eef0ff; border-radius: 5px; padding: 2px 7px; transition: .12s; }
+        #editor .ecopy:hover { background: #3b46d6; color: #fff; }
+        #editor textarea[readonly] { background: rgba(243, 244, 248, .7); color: #44506a; }
+        #editor .ebody { padding: 0 10px 10px; }
+        #editor.collapsed .ecard, #editor.collapsed .ebody { display: none; }
+        #editor textarea {
+            width: 100%; height: min(46vh, 360px); resize: vertical; box-sizing: border-box;
+            font-family: var(--mono); font-size: 11px; line-height: 1.5; color: var(--ink);
+            background: rgba(255, 255, 255, .72); border: 1px solid var(--line); border-radius: 8px;
+            padding: 8px 9px; outline: none; white-space: pre; overflow: auto; tab-size: 2;
+        }
+        #editor textarea:focus { border-color: #9fb0cc; background: #fff; }
+        #editor .estatus { margin-top: 7px; font-family: var(--mono); font-size: 10.5px; line-height: 1.55; min-height: 14px; }
+        #editor .estatus.ok { color: #21a05a; }
+        #editor .estatus.err { color: #d23b56; white-space: pre-wrap; }
+
+        #rail { top: 15px; right: 15px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+        .legend { padding: 10px 12px; font-family: var(--mono); font-size: 11px; color: var(--ink-dim); min-width: 150px; }
+        .legend .r { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+        .legend b { color: var(--ink); font-weight: 600; }
+        .legend .theme-btn { pointer-events: auto; cursor: pointer; color: var(--ink-dim); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; margin-top: 4px; user-select: none; transition: .12s; }
+        .legend .theme-btn:hover { color: var(--ink); border-color: #9fb0cc; background: #fff; }
+        .legend .palette { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
+        .legend .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+        .legend .preset { pointer-events: auto; cursor: pointer; border: 1px solid var(--line); border-radius: 6px; padding: 5px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: .12s; }
+        .legend .preset:hover { border-color: #9fb0cc; background: #fff; }
+        .legend .preset[data-on="true"] { border-color: #3b46d6; background: #eef0ff; }
+        .legend .preset .sw { display: flex; gap: 3px; }
+        .legend .preset .sw i { width: 11px; height: 11px; border-radius: 3px; }
+        .legend .preset span { font-size: 9px; color: var(--ink-dim); }
+        .legend .sl { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 0; }
+        .legend .sl input { pointer-events: auto; width: 86px; accent-color: #3b46d6; }
+        .chip { width: 18px; height: 10px; border-radius: 2px; flex: none; border: 1px solid rgba(0, 0, 0, .08); }
+
+        .controls { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; max-width: 210px; padding: 9px 10px; }
+        .btn {
+            pointer-events: auto; cursor: pointer; border: 1px solid var(--line);
+            background: rgba(255, 255, 255, .7); color: var(--ink);
+            font-family: var(--mono); font-size: 11px; padding: 6px 9px; border-radius: 7px;
+            transition: .13s; user-select: none;
+        }
+        .btn:hover { border-color: #9fb0cc; background: #fff; }
+        .btn[data-on="true"] { border-color: #21a05a; color: #fff; background: #21a05a; }
+        .btn.b[data-on="true"] { border-color: #3b46d6; background: #3b46d6; }
+
+        #inspect { right: 16px; bottom: 16px; width: min(300px, 76vw); opacity: 0; transform: translateY(6px); transition: .15s; }
+        #inspect.show { opacity: 1; transform: none; }
+        #inspect .w { padding: 11px 14px 12px; }
+        #inspect .t { font-family: var(--mono); font-size: 10px; letter-spacing: .15em; text-transform: uppercase; }
+        #inspect h2 { margin: 3px 0 1px; font-size: 14px; font-weight: 650; }
+        #inspect .s { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); }
+        #inspect .eq {
+            margin-top: 8px; font-family: var(--mono); font-size: 11.5px;
+            background: rgba(59, 70, 214, .06); border: 1px solid rgba(59, 70, 214, .15);
+            border-radius: 7px; padding: 7px 9px; line-height: 1.5; word-break: break-word;
+        }
+        #inspect #i-meta { margin-top: 2px; }
+        #inspect #i-compute { background: rgba(33, 160, 90, .07); border-color: rgba(33, 160, 90, .2); font-size: 11px; color: #2a3140; white-space: pre-wrap; }
+        #inspect #i-compute:empty { display: none; }
+
+        #hint { bottom: 16px; left: 16px; font-family: var(--mono); font-size: 10.5px; color: var(--ink-dim); line-height: 1.7; opacity: .85; }
+        #hint kbd { font-family: var(--mono); color: var(--ink); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; background: #fff; }
+
+        #loader { position: fixed; inset: 0; display: grid; place-items: center; z-index: 9; background: var(--bg-0); transition: opacity .5s; }
+        #loader .l { font-family: var(--mono); font-size: 12px; letter-spacing: .2em; color: var(--ink-dim); text-transform: uppercase; }
+        #loader.done { opacity: 0; pointer-events: none; }
+
+        @media (max-width: 720px) { #hint { display: none; } #title { max-width: 82vw; } #editor { display: none; } }
+    </style>
+</head>
+<body>
+    <canvas id="stage"></canvas>
+    <div id="loader"><div class="l">assembling network...</div></div>
+
+    <div class="hud panel" id="title">
+        <div class="w">
+            <div class="k">equations . live</div>
+            <h1>model, as a 3D graph</h1>
+            <p>Define a model in the editor — every tensor op becomes a block, every dependency a flow. Shapes drive geometry. <code id="cfg"></code></p>
+        </div>
+    </div>
+
+    <div class="hud panel collapsed" id="editor">
+        <div class="ehead">
+            <span class="k">model . equations</span>
+            <span class="etoggle" id="e-toggle">edit</span>
+        </div>
+        <div class="ecats" id="e-cats"></div>
+        <div class="etabs" id="e-tabs"></div>
+        <div class="ecard" id="e-card"></div>
+        <div class="ebody">
+            <div class="esrcbar"><span id="e-srcmode">read-only preset</span><span class="ecopy" id="e-copy">copy to Custom ✎</span></div>
+            <textarea id="e-src" spellcheck="false" readonly></textarea>
+            <div class="estatus ok" id="e-status"></div>
+        </div>
+    </div>
+
+    <div class="hud" id="rail">
+        <div class="panel legend" id="legend">
+            <div class="r"><span class="chip" id="sw-w" style="background:var(--weight)"></span><b>Weights</b></div>
+            <div class="r"><span class="chip" id="sw-a" style="background:var(--act)"></span><b>Activations</b></div>
+            <div class="r"><span class="theme-btn" id="theme-btn">colour theme ▾</span></div>
+            <div class="palette" id="palette" hidden>
+                <div class="presets" id="presets"></div>
+                <label class="sl">weights<input type="range" id="br-w" min="0.4" max="1.6" step="0.01" value="1"></label>
+                <label class="sl">activations<input type="range" id="br-a" min="0.4" max="1.6" step="0.01" value="1"></label>
+            </div>
+        </div>
+        <div class="panel controls">
+            <div class="btn b" id="b-rot" data-on="false">auto-orbit</div>
+            <div class="btn" id="b-lab" data-on="true">labels</div>
+            <div class="btn" id="b-reset">reset view</div>
+        </div>
+    </div>
+
+    <div class="hud panel" id="inspect">
+        <div class="w">
+            <div class="t" id="i-tag">tensor</div>
+            <h2 id="i-name">-</h2>
+            <div class="s" id="i-shape"></div>
+            <div class="s" id="i-meta"></div>
+            <div class="eq" id="i-eq"></div>
+            <div class="eq" id="i-compute"></div>
+        </div>
+    </div>
+
+    <div class="hud" id="hint">
+        <div><kbd>drag</kbd> orbit . <kbd>scroll</kbd> zoom . <kbd>right-drag</kbd> pan</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        "use strict";
+
+        /* ===== SEEDED VALUES (cells are decorative texture, not a live forward pass) ===== */
+        function mulberry32(a) {
+            return function () {
+                a |= 0; a = a + 0x6D2B79F5 | 0;
+                let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            };
+        }
+        function hashStr(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+        function cellVal(id, x, y) {
+            const seed = (hashStr(id) ^ Math.imul(x + 1, 73856093) ^ Math.imul(y + 1, 19349663)) >>> 0;
+            return mulberry32(seed)() * 2 - 1;
+        }
+
+        /* ===== MODEL DSL: parser + shape inference ===== */
+        // Expand `for i in 0..N { ... }` loops with `$i` interpolation into flat lines.
+        function expandLoops(src) {
+            const lines = src.split('\n').map(l => l.replace(/#.*$/, '').replace(/\s+$/, '')).filter(l => l.trim() !== '');
+            let pos = 0;
+            function seq(insideBlock) {
+                const out = [];
+                while (pos < lines.length) {
+                    const t = lines[pos].trim();
+                    if (t === '}') { if (insideBlock) { pos++; return out; } throw new Error("unexpected '}'"); }
+                    const m = t.match(/^for\s+(\w+)\s+in\s+(-?\d+)\s*\.\.\s*(-?\d+)\s*\{$/);
+                    if (m) {
+                        pos++;
+                        const body = seq(true);              // fully expands nested loops first
+                        const v = m[1], lo = +m[2], hi = +m[3];
+                        const re = new RegExp('\\$' + v + '(?![A-Za-z0-9])', 'g');
+                        for (let k = lo; k < hi; k++) for (const bl of body) out.push(bl.replace(re, '_' + k));
+                    } else { out.push(lines[pos]); pos++; }
+                }
+                if (insideBlock) throw new Error("missing '}'");
+                return out;
+            }
+            return seq(false);
+        }
+
+        function parseModel(src) {
+            const errors = [];
+            let lines;
+            try { lines = expandLoops(src); } catch (e) { return { order: [], nodes: {}, errors: [String(e.message || e)], outputId: null }; }
+
+            const dims = {}, nodes = {}, order = [], env = {};
+            let uid = 0; const newId = () => 'n' + (uid++);
+            let outputId = null;
+            const addNode = n => { nodes[n.id] = n; order.push(n.id); return n; };
+            const labelBase = name => name.split('_')[0];
+
+            function evalDim(str) {
+                const tk = str.match(/\d+|[A-Za-z_]\w*|[()+\-*/]/g) || []; let p = 0;
+                const peek = () => tk[p], next = () => tk[p++];
+                function prim() { const t = next(); if (t === '(') { const v = expr(); if (next() !== ')') throw new Error('expected )'); return v; } if (/^\d+$/.test(t)) return parseInt(t); if (t in dims) return dims[t]; throw new Error(`unknown dim '${t}'`); }
+                function term() { let v = prim(); while (peek() === '*' || peek() === '/') { const o = next(), r = prim(); v = o === '*' ? v * r : Math.floor(v / r); } return v; }
+                function expr() { let v = term(); while (peek() === '+' || peek() === '-') { const o = next(), r = term(); v = o === '+' ? v + r : v - r; } return v; }
+                const v = expr(); if (p !== tk.length) throw new Error('bad dimension expression'); if (!isFinite(v) || v <= 0) throw new Error('dimension must be > 0'); return v;
+            }
+
+            const tokenizeExpr = s => s.match(/\.[Tt]\b|[A-Za-z_]\w*|\d+\.?\d*|[@+\-*/(),\[\]=]/g) || [];
+            const tensorFuncs = new Set(['Input', 'Parameter', 'cat', 'concat', 'conv', 'pool', 'upsample', 'softmax', 'gelu', 'relu', 'tanh', 'sigmoid', 'layernorm', 'transpose']);
+            const dimArg = a => { if (a.kind === 'num') return a.lit | 0; throw new Error('expected a dimension number'); };
+
+            // Only *tensors that occupy memory* become blocks: model inputs, learned weights, and
+            // named results. Intermediate ops (transpose, an inner matmul, …) are folded into the
+            // equation of the named result, never their own block — closer to the real compute graph.
+            const SYM = { matmul: ' · ', add: ' + ', sub: ' − ', mul: ' ⊙ ' };
+            const UNARY = { softmax: 'softmax', gelu: 'GELU', relu: 'ReLU', tanh: 'tanh', sigmoid: 'σ', layernorm: 'LayerNorm' };
+            const tightenT = d => d.render.includes(' ') ? `(${d.render})` : d.render;   // wrap before a ᵀ
+            const tensorArg = (args, i) => { if (args[i] && args[i].kind === 'tensor') return args[i]; throw new Error(`expected a tensor argument`); };
+            const unionRefs = args => { const s = []; args.forEach(a => a.kind === 'tensor' && a.refs.forEach(r => s.includes(r) || s.push(r))); return s; };
+
+            function makeLeaf(op, args) {
+                if (args.length !== 2) throw new Error(`${op}(rows, cols) needs two dimensions`);
+                const shape = [dimArg(args[0]), dimArg(args[1])];
+                const node = addNode({ id: newId(), kind: op, op, shape, inputs: [], label: op === 'param' ? 'weight' : 'input', eq: null, fullName: null });
+                return { kind: 'tensor', shape, refs: [node.id], render: node.label, leafId: node.id, fresh: true };
+            }
+            function makeCompute(op, args) {
+                let shape, render;
+                switch (op) {
+                    case 'matmul': { const a = tensorArg(args, 0), b = tensorArg(args, 1); if (a.shape[1] !== b.shape[0]) throw new Error(`matmul shape mismatch [${a.shape}] · [${b.shape}] (${a.shape[1]} ≠ ${b.shape[0]})`); shape = [a.shape[0], b.shape[1]]; render = a.render + SYM.matmul + b.render; break; }
+                    case 'add': case 'sub': case 'mul': { const a = tensorArg(args, 0), b = tensorArg(args, 1); if (a.shape[0] !== b.shape[0] || a.shape[1] !== b.shape[1]) throw new Error(`${op} needs equal shapes [${a.shape}] vs [${b.shape}]`); shape = [a.shape[0], a.shape[1]]; render = a.render + SYM[op] + b.render; break; }
+                    case 'transpose': { const a = tensorArg(args, 0); shape = [a.shape[1], a.shape[0]]; render = tightenT(a) + 'ᵀ'; break; }
+                    case 'concat': { if (args.length < 2) throw new Error('concat needs ≥ 2 tensors'); const r = tensorArg(args, 0).shape[0]; let c = 0; args.forEach((_, i) => { const s = tensorArg(args, i).shape; if (s[0] !== r) throw new Error('concat: row counts differ'); c += s[1]; }); shape = [r, c]; render = '[' + args.map(a => a.render).join(' ∥ ') + ']'; break; }
+                    case 'scale': { const a = tensorArg(args, 0); shape = a.shape.slice(); render = a.render; break; }
+                    case 'conv': { const a = tensorArg(args, 0), b = tensorArg(args, 1); if (a.shape[1] !== b.shape[0]) throw new Error(`conv channel mismatch [${a.shape}] * [${b.shape}] (${a.shape[1]} ≠ ${b.shape[0]})`); shape = [a.shape[0], b.shape[1]]; render = `conv(${a.render}, ${b.render})`; break; }
+                    case 'pool': { const a = tensorArg(args, 0); const k = args[1] ? dimArg(args[1]) : 2; if (k < 1) throw new Error('pool factor must be ≥ 1'); shape = [Math.ceil(a.shape[0] / k), a.shape[1]]; render = `pool(${a.render})`; break; }
+                    case 'upsample': { const a = tensorArg(args, 0); const k = args[1] ? dimArg(args[1]) : 2; if (k < 1) throw new Error('upsample factor must be ≥ 1'); shape = [a.shape[0] * k, a.shape[1]]; render = `up(${a.render})`; break; }
+                    case 'softmax': case 'gelu': case 'relu': case 'tanh': case 'sigmoid': case 'layernorm': { const a = tensorArg(args, 0); shape = [a.shape[0], a.shape[1]]; render = `${UNARY[op]}(${a.render})`; break; }
+                    default: throw new Error(`unknown op '${op}'`);
+                }
+                return { kind: 'tensor', shape, refs: unionRefs(args), render, leafId: null, fresh: false };
+            }
+            const asTensor = d => { if (d && d.kind === 'tensor') return d; throw new Error('expected a tensor, got a number'); };
+            function applyFunc(name, args) {
+                const targs = args.filter(a => a.kind !== 'kwarg');                 // ignore keyword args like dim=-1
+                if (name === 'Input') return makeLeaf('input', targs);
+                if (name === 'Parameter') return makeLeaf('param', targs);
+                if (name === 'cat' || name === 'concat') {
+                    const items = (targs[0] && targs[0].kind === 'list') ? targs[0].items : targs;   // cat([a,b,…]) or concat(a,b,…)
+                    return makeCompute('concat', items.map(asTensor));
+                }
+                if (name === 'transpose') return makeCompute('transpose', [asTensor(targs[0])]);
+                if (name === 'conv') return makeCompute('conv', [asTensor(targs[0]), asTensor(targs[1])]);
+                if (name === 'pool' || name === 'upsample') return makeCompute(name, [asTensor(targs[0]), targs[1] || { kind: 'num', lit: 2 }]);
+                if (['softmax', 'gelu', 'relu', 'tanh', 'sigmoid', 'layernorm'].includes(name)) return makeCompute(name, [asTensor(targs[0])]);
+                throw new Error(`unknown function '${name}'`);
+            }
+            // PyTorch-flavoured expressions:  @ matmul · + - elementwise · * mul/scale · .T transpose
+            function parseExpr(tokens) {
+                let p = 0; const peek = () => tokens[p];
+                function primary() {
+                    const t = tokens[p];
+                    if (t === undefined) throw new Error('unexpected end of expression');
+                    if (t === '(') { p++; const e = add(); if (tokens[p] !== ')') throw new Error("expected ')'"); p++; return e; }
+                    if (t === '[') {
+                        p++; const items = [];
+                        if (tokens[p] !== ']') { items.push(add()); while (tokens[p] === ',') { p++; items.push(add()); } }
+                        if (tokens[p] !== ']') throw new Error("expected ']'"); p++; return { kind: 'list', items };
+                    }
+                    if (t === '-') { p++; const v = primary(); if (v.kind === 'num') return { kind: 'num', lit: -v.lit }; throw new Error('cannot negate a tensor'); }
+                    if (/^\d/.test(t)) { p++; return { kind: 'num', lit: parseFloat(t) }; }
+                    if (/^[A-Za-z_]\w*$/.test(t)) {
+                        p++;
+                        if (tokens[p] === '(') {
+                            p++; const args = [];
+                            if (tokens[p] !== ')') { args.push(arg()); while (tokens[p] === ',') { p++; args.push(arg()); } }
+                            if (tokens[p] !== ')') throw new Error("expected ')'"); p++; return applyFunc(t, args);
+                        }
+                        if (t in env) { const id = env[t]; return { kind: 'tensor', shape: nodes[id].shape, refs: [id], render: nodes[id].label, leafId: id, fresh: false }; }
+                        if (t in dims) return { kind: 'num', lit: dims[t] };
+                        throw new Error(`unknown name '${t}'`);
+                    }
+                    throw new Error(`unexpected token '${t}'`);
+                }
+                function arg() { if (/^[A-Za-z_]\w*$/.test(tokens[p] || '') && tokens[p + 1] === '=') { p += 2; add(); return { kind: 'kwarg' }; } return add(); }
+                function postfix() { let e = primary(); while (peek() === '.T' || peek() === '.t') { p++; e = makeCompute('transpose', [asTensor(e)]); } return e; }
+                function mul() {
+                    let e = postfix();
+                    while (peek() === '@' || peek() === '*' || peek() === '/') {
+                        const op = tokens[p++], r = postfix();
+                        if (op === '@') e = makeCompute('matmul', [asTensor(e), asTensor(r)]);
+                        else if (op === '*') {
+                            if (e.kind === 'tensor' && r.kind === 'tensor') e = makeCompute('mul', [e, r]);
+                            else e = makeCompute('scale', [asTensor(e.kind === 'tensor' ? e : r), e.kind === 'num' ? e : r]);
+                        } else e = makeCompute('scale', [asTensor(e), r]);   // tensor / scalar
+                    }
+                    return e;
+                }
+                function add() {
+                    let e = mul();
+                    while (peek() === '+' || peek() === '-') { const op = tokens[p++], r = mul(); e = makeCompute(op === '+' ? 'add' : 'sub', [asTensor(e), asTensor(r)]); }
+                    return e;
+                }
+                const d = add(); if (p !== tokens.length) throw new Error(`trailing tokens near '${tokens[p]}'`); return d;
+            }
+
+            lines.forEach((raw, idx) => {
+                const text = raw.trim(); if (!text) return;
+                const eq = text.indexOf('=');
+                if (eq < 0) { errors.push(`line ${idx + 1}: expected 'name = …'  («${text}»)`); return; }
+                const name = text.slice(0, eq).trim(), rhs = text.slice(eq + 1).trim();
+                if (!/^[A-Za-z_]\w*$/.test(name)) { errors.push(`line ${idx + 1}: invalid name '${name}'`); return; }
+                const toks = tokenizeExpr(rhs);
+                // A tensor expression references a tensor, a tensor op (@ .T […]) or a tensor function;
+                // anything else (plain dim arithmetic over numbers/dims) is a dimension definition.
+                const isTensor = toks.some(tk => tk === '@' || tk === '.T' || tk === '.t' || tk === '[' || tensorFuncs.has(tk) || (tk in env));
+                if (!isTensor) {
+                    try { dims[name] = evalDim(rhs); } catch (e) { errors.push(`line ${idx + 1}: ${e.message}`); }
+                    return;
+                }
+                try {
+                    const d = parseExpr(toks);
+                    if (d.kind !== 'tensor') { errors.push(`line ${idx + 1}: result is not a tensor`); return; }
+                    if (d.leafId != null && d.fresh) {                 // a fresh weight/input — relabel it
+                        const node = nodes[d.leafId];
+                        node.label = labelBase(name); node.fullName = name;
+                        node.eq = node.op === 'param' ? 'learned parameter' : 'model input';
+                        env[name] = d.leafId; outputId = d.leafId;
+                    } else if (d.leafId != null) {                     // bare reference -> alias
+                        env[name] = d.leafId;
+                    } else {                                            // computed result -> one block, op folded into the equation
+                        const id = newId();
+                        addNode({ id, kind: 'op', op: null, shape: d.shape, inputs: d.refs, label: labelBase(name), fullName: name, eq: d.render });
+                        env[name] = id; outputId = id;
+                    }
+                } catch (e) { errors.push(`line ${idx + 1}: ${e.message}`); }
+            });
+
+            if (order.length === 0 && errors.length === 0) errors.push('no tensors defined');
+            return { order, nodes, errors, outputId };
+        }
+
+        /* ===== LAYERED DAG LAYOUT (overlap-free by construction) ===== */
+        const CELL = 0.40, HGAP = 1.7, VGAP = 2.4;
+        // Visual cell count for a real tensor dimension. The rendered grid is a
+        // LOG-SCALED proxy (with a floor) — never the literal dimension — so a real
+        // [2048 x 12288] tensor draws as a small readable grid instead of 25M cells.
+        // The true shape is kept on the block and shown on hover; nothing is faked.
+        const GMIN = 3, GMAX = 42, GBASE = 2.0, GK = 2.4;
+        const gridCount = n => Math.max(GMIN, Math.min(GMAX, Math.round(GBASE + GK * Math.log2(Math.max(1, n)))));
+        function layoutGraph(graph) {
+            const N = graph.nodes, ord = graph.order;
+            const layerOf = {}, consumers = {};
+            ord.forEach(id => N[id].inputs.forEach(inp => { (consumers[inp] = consumers[inp] || []).push(id); }));
+
+            // depth from inputs; weight inputs do NOT push a node deeper
+            ord.forEach(id => {
+                const n = N[id];
+                if (n.kind === 'param') { layerOf[id] = 0; return; }
+                const act = n.inputs.filter(i => N[i] && N[i].kind !== 'param');
+                layerOf[id] = act.length ? 1 + Math.max(...act.map(i => layerOf[i])) : 0;
+            });
+            // weights sit in the same band as the op they feed
+            ord.forEach(id => { const n = N[id]; if (n.kind !== 'param') return; const cs = consumers[id] || []; layerOf[id] = cs.length ? Math.min(...cs.map(c => layerOf[c])) : 0; });
+
+            // longest activation path -> residual "spine" pinned to x = 0
+            const lp = {}, prev = {};
+            ord.forEach(id => {
+                const n = N[id]; if (n.kind === 'param') { lp[id] = -1; return; }
+                let best = 0, bp = null;
+                n.inputs.forEach(i => { if (N[i] && N[i].kind !== 'param' && lp[i] + 1 > best) { best = lp[i] + 1; bp = i; } });
+                lp[id] = best; prev[id] = bp;
+            });
+            let endId = (graph.outputId && N[graph.outputId]) ? graph.outputId : null;
+            if (!endId) { let m = -1; ord.forEach(id => { if (N[id].kind !== 'param' && lp[id] > m) { m = lp[id]; endId = id; } }); }
+            const spine = new Set(); for (let c = endId; c != null; c = prev[c]) spine.add(c);
+
+            // ================= DEPTH (Z) = PARALLELISM, on two scales =================
+            // Anything that runs in parallel is pushed into its own depth plane so its flows never
+            // cross other branches in one crowded plane. Parallelism is detected two ways:
+            //   COARSE — loop replicas (attention heads, MoE experts): a name index that varies while
+            //            the layer stays constant.
+            //   FINE   — structural siblings with no loop index (Q/K/V off LN1, the 4 LSTM gates off
+            //            X+State): activations at the same layer & coarse-lane sharing an identical set
+            //            of activation-parents. Same layer ⇒ mutually independent (an ancestor sits at
+            //            a strictly smaller layer), so no reachability test is needed.
+            // A weight rides into the depth plane of the branch it feeds, so weights for different
+            // operations never share a plane — which is what made the flat layout cross itself.
+            const idxOf = n => { if (!n.fullName) return null; const p = n.fullName.split('_'); return p.length > 1 ? p.slice(1).map(Number) : []; };
+            const named = ord.map(id => N[id]).filter(n => n.fullName && n.fullName.includes('_'));
+            let zPos = -1, maxIdx = 0; named.forEach(n => maxIdx = Math.max(maxIdx, idxOf(n).length));
+            for (let p = 0; p < maxIdx; p++) {
+                const groups = {}, distinct = new Set(); let ok = true;
+                named.forEach(n => { const ix = idxOf(n); if (ix.length <= p) return; distinct.add(ix[p]); const key = n.label + '|' + ix.filter((_, i) => i !== p).join(','); (groups[key] = groups[key] || new Set()).add(layerOf[n.id]); });
+                for (const k in groups) if (groups[k].size > 1) { ok = false; break; }
+                if (ok && distinct.size > 1) { zPos = p; break; }
+            }
+            // coarse lane = explicit replica index (heads/experts), else inherited from inputs
+            const lane = {};
+            ord.forEach(id => {
+                const n = N[id], ix = idxOf(n); let l = null;
+                if (zPos >= 0 && ix && ix.length > zPos) l = ix[zPos];
+                if (l === null) { const ls = n.inputs.map(i => lane[i]).filter(v => v != null); if (ls.length && ls.every(v => v === ls[0])) l = ls[0]; }
+                lane[id] = l;
+            });
+            const laneVals = [...new Set(Object.values(lane).filter(v => v != null))].sort((a, b) => a - b);
+            const laneIndex = {}; laneVals.forEach((v, i) => laneIndex[v] = i);
+
+            // fine lane = structural-sibling rank within (layer, coarse-lane, identical parent set)
+            const actParents = id => N[id].inputs.filter(i => N[i] && N[i].kind !== 'param');
+            const fgroups = {}, fkey = {};
+            ord.forEach(id => {
+                const n = N[id]; if (n.kind === 'param') return;
+                const pa = actParents(id); if (!pa.length) return;
+                const k = layerOf[id] + '|' + (lane[id] == null ? 'x' : lane[id]) + '|' + pa.slice().sort().join(',');
+                (fgroups[k] = fgroups[k] || []).push(id); fkey[id] = k;
+            });
+            const grouped = id => { const g = fgroups[fkey[id]]; return !!(g && g.length > 1); };
+            const fine = {}, FINE = 1.9;
+            ord.forEach(id => {
+                const n = N[id]; if (n.kind === 'param') return;
+                const pa = actParents(id);
+                const base = pa.length ? pa.reduce((s, i) => s + (fine[i] || 0), 0) / pa.length : 0;   // continue / merge re-centers
+                const g = fgroups[fkey[id]];
+                fine[id] = (g && g.length > 1) ? base + (g.indexOf(id) - (g.length - 1) / 2) * FINE : base;   // diverge fans out
+            });
+            // a weight inherits the depth of the activation(s) it feeds
+            ord.forEach(id => { const n = N[id]; if (n.kind !== 'param') return; const cs = (consumers[id] || []).filter(c => N[c] && N[c].kind !== 'param'); fine[id] = cs.length ? cs.reduce((s, c) => s + (fine[c] || 0), 0) / cs.length : 0; });
+
+            const LANE_DEPTH = 5.4;
+            const coarseZ = id => lane[id] == null ? 0 : (laneIndex[lane[id]] - (laneVals.length - 1) / 2) * LANE_DEPTH;
+            const zOf = id => coarseZ(id) + (fine[id] || 0);
+
+            // ---- X columns: replicas AND fine-siblings collapse to ONE column and differ only in depth ----
+            const roleKey = id => layerOf[id] + '|' + actParents(id).map(i => N[i].label).sort().join(',');   // replica/sibling-independent
+            const colKey = n => {
+                const id = n.id, ix = idxOf(n);
+                if (grouped(id)) return 'G:' + roleKey(id);                                  // sibling stack shares one column
+                // weights keep a per-label column (distinct X) but each rides into its branch's depth (Z)
+                return n.label + '|' + (ix ? ix.filter((_, i) => i !== zPos).join(',') : '');
+            };
+
+            // group by layer; lay out vertical bands by max height, columns in X, replicas in Z
+            const layers = {}; ord.forEach(id => { (layers[layerOf[id]] = layers[layerOf[id]] || []).push(id); });
+            const Ls = Object.keys(layers).map(Number).sort((a, b) => a - b);
+            const w = id => gridCount(N[id].shape[1]) * CELL, h = id => gridCount(N[id].shape[0]) * CELL;
+            const xc = {}, yc = {};
+            let y = 0;
+            Ls.forEach(L => {
+                const ids = layers[L];
+                const bandH = Math.max(...ids.map(h));
+                const cy = y - VGAP - bandH / 2; ids.forEach(id => yc[id] = cy); y = cy - bandH / 2;
+
+                const cols = {};
+                ids.forEach(id => { const k = colKey(N[id]); (cols[k] = cols[k] || { ids: [] }).ids.push(id); });
+                const colList = Object.values(cols);
+                colList.forEach(c => { c.w = Math.max(...c.ids.map(w)); c.spine = c.ids.some(id => spine.has(id)); c.weight = c.ids.every(id => N[id].kind === 'param'); });
+                const setX = (c, x) => c.ids.forEach(id => xc[id] = x);
+                const spineCol = colList.find(c => c.spine);
+                const others = colList.filter(c => c !== spineCol && !c.weight);
+                const weights = colList.filter(c => c !== spineCol && c.weight);
+                if (spineCol) {
+                    setX(spineCol, 0);
+                    let rc = spineCol.w / 2; others.forEach(c => { rc += HGAP + c.w / 2; setX(c, rc); rc += c.w / 2; });
+                    let lc = -spineCol.w / 2; weights.forEach(c => { lc -= HGAP + c.w / 2; setX(c, lc); lc -= c.w / 2; });
+                } else {
+                    const all = others.concat(weights);
+                    let total = all.reduce((s, c) => s + c.w, 0) + HGAP * Math.max(0, all.length - 1);
+                    let x = -total / 2; all.forEach(c => { setX(c, x + c.w / 2); x += c.w + HGAP; });
+                }
+            });
+
+            // materialise blocks + links
+            const blocks = [], links = [], byId = {};
+            ord.forEach(id => {
+                const n = N[id], cx = gridCount(n.shape[1]), cyy = gridCount(n.shape[0]);
+                const b = {
+                    id, name: n.label || id, t: n.kind === 'param' ? 'w' : 'i', cx, cy: cyy,
+                    dx: cx * CELL, dy: cyy * CELL, dz: CELL, pos: [xc[id] || 0, yc[id] || 0, zOf(id)],
+                    eq: n.eq || `${n.op}  →  [${n.shape[0]}×${n.shape[1]}]`, shape: n.shape, spine: spine.has(id),
+                    kind: n.kind, op: n.op,
+                    ins: n.inputs.filter(i => N[i]).map(i => ({ id: i, name: N[i].label || i, shape: N[i].shape })),
+                    mute: n.kind === 'op' && !n.fullName            // hide labels on un-named intermediates
+                };
+                blocks.push(b); byId[id] = b;
+            });
+            ord.forEach(id => N[id].inputs.forEach(inp => {
+                if (!byId[inp]) return;
+                // the wide residual ribbon only traces the central stream (center-lane chain links)
+                const backbone = prev[id] === inp && lane[inp] == null && lane[id] == null;
+                links.push({ a: inp, b: id, t: N[inp].kind === 'param' ? 'w' : 'i', skip: Math.abs(layerOf[id] - layerOf[inp]) > 1, spinePair: backbone });
+            }));
+            return { blocks, links, byId };
+        }
+
+        /* ===== THREE.JS SETUP ===== */
+        const canvas = document.getElementById('stage'), renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 4000);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.86));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.5); sun.position.set(0.4, 1, 0.85); scene.add(sun);
+
+        const yUpVector = new THREE.Vector3(0, 1, 0);
+
+        const tempColor = new THREE.Color();
+        function getCellColor(type, intensity) {
+            const base = type === 'w' ? [0.40, 0.40, 0.78] : [0.42, 0.66, 0.46], brighten = 0.62 + 0.95 * Math.pow(intensity, 1.15);
+            return tempColor.setRGB(Math.min(1, base[0] * brighten), Math.min(1, base[1] * brighten), Math.min(1, base[2] * brighten));
+        }
+
+        const tileGeometry = new THREE.BoxGeometry(1, 1, 1), dummyObject = new THREE.Object3D();
+
+        // mutable scene state (rebuilt on every model edit)
+        let blocks = [], links = [], byId = {};
+
+        // Each block is ONE instanced box; its cell grid is drawn procedurally in the
+        // fragment shader (cells = floor(uv * grid), value = hash(seed, cell)). So a block
+        // costs a single instance no matter how large the matrix — exact 96x96 stays light —
+        // and the cells stay crisp at any zoom. One draw call for every block in the model.
+        // Live-tunable colour theme (shared uniform objects so edits update every cell at once).
+        const cellUniforms = {
+            uActColor: { value: new THREE.Color(0.42, 0.66, 0.46) },
+            uWtColor: { value: new THREE.Color(0.40, 0.40, 0.78) },
+            uActBright: { value: 1.0 },
+            uWtBright: { value: 1.0 },
+        };
+        const cellMaterial = new THREE.MeshBasicMaterial({ vertexColors: false });
+        cellMaterial.onBeforeCompile = shader => {
+            Object.assign(shader.uniforms, cellUniforms);
+            shader.vertexShader = `attribute float aSeed; attribute vec2 aGrid; attribute float aType;
+                varying vec2 vCuv; varying float vSeed; varying vec2 vGrid; varying float vType;\n`
+                + shader.vertexShader.replace('#include <begin_vertex>',
+                    '#include <begin_vertex>\n vCuv = uv; vSeed = aSeed; vGrid = aGrid; vType = aType;');
+            shader.fragmentShader = `varying vec2 vCuv; varying float vSeed; varying vec2 vGrid; varying float vType;
+                uniform vec3 uActColor; uniform vec3 uWtColor; uniform float uActBright; uniform float uWtBright;
+                float vhash(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }\n`
+                + shader.fragmentShader.replace('vec4 diffuseColor = vec4( diffuse, opacity );', `
+                    vec2 cell = floor(vCuv * vGrid);
+                    // softer per-cell value variation (lower contrast) so the texture is calm, not noisy
+                    float inten = 0.76 + 0.34 * pow(vhash(cell + vSeed), 1.0);
+                    float isW = step(0.5, vType);
+                    vec3 base = mix(uActColor, uWtColor, isW);
+                    float br = mix(uActBright, uWtBright, isW);
+                    vec3 cellCol = min(vec3(1.0), base * inten * br);
+                    vec2 fr = fract(vCuv * vGrid);
+                    // thin, soft gap lines (not stark white) between cells
+                    float onCell = step(0.05, fr.x) * step(0.05, fr.y) * step(fr.x, 0.95) * step(fr.y, 0.95);
+                    vec3 finalCol = mix(mix(cellCol, vec3(1.0), 0.55), cellCol, onCell);
+                    vec4 diffuseColor = vec4( finalCol, opacity );`);
+        };
+        let cellMesh = null, cellGeom = null;
+        function buildCells() {
+            const n = blocks.length;
+            const seed = new Float32Array(n), grid = new Float32Array(n * 2), type = new Float32Array(n);
+            cellGeom = tileGeometry.clone();
+            const mesh = new THREE.InstancedMesh(cellGeom, cellMaterial, n);
+            for (let i = 0; i < n; i++) {
+                const b = blocks[i], [ox, oy, oz] = b.pos;
+                dummyObject.position.set(ox, oy, oz); dummyObject.scale.set(b.dx, b.dy, b.dz); dummyObject.updateMatrix();
+                mesh.setMatrixAt(i, dummyObject.matrix);
+                seed[i] = (hashStr(b.id) % 4096) / 4096 * 6.2831;   // per-block seed for the texture
+                grid[i * 2] = b.cx; grid[i * 2 + 1] = b.cy; type[i] = b.t === 'w' ? 1 : 0;
+                b.box = new THREE.Box3(new THREE.Vector3(ox - b.dx / 2, oy - b.dy / 2, oz - b.dz / 2), new THREE.Vector3(ox + b.dx / 2, oy + b.dy / 2, oz + b.dz / 2));
+            }
+            cellGeom.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seed, 1));
+            cellGeom.setAttribute('aGrid', new THREE.InstancedBufferAttribute(grid, 2));
+            cellGeom.setAttribute('aType', new THREE.InstancedBufferAttribute(type, 1));
+            mesh.instanceMatrix.needsUpdate = true; mesh.frustumCulled = false;
+            cellMesh = mesh; scene.add(mesh);
+        }
+
+        function getDockPoint(block, side) {
+            const [x, y, z] = block.pos;
+            if (side === 'right') return new THREE.Vector3(x + block.dx / 2, y, z);
+            if (side === 'left') return new THREE.Vector3(x - block.dx / 2, y, z);
+            if (side === 'bottom') return new THREE.Vector3(x, y - block.dy / 2, z);
+            if (side === 'top') return new THREE.Vector3(x, y + block.dy / 2, z);
+            return new THREE.Vector3(x, y, z);
+        }
+        function spreadDock(point, block, side, idx, n) {
+            if (n <= 1) return point;
+            const frac = (idx - (n - 1) / 2) / n, horiz = (side === 'top' || side === 'bottom');
+            const q = point.clone(), off = frac * (horiz ? block.dx : block.dy) * 0.74;
+            if (horiz) q.x += off; else q.y += off; return q;
+        }
+
+        // Arrows are tinted from the SAME theme uniforms as the cells (per-vertex type 0=activation,
+        // 1=weight), so changing the colour theme recolours the flows live with no rebuild.
+        let linkMesh = null;
+        const linkMaterial = new THREE.MeshBasicMaterial({ vertexColors: false, transparent: true, opacity: 0.82, side: THREE.DoubleSide, depthWrite: false });
+        linkMaterial.onBeforeCompile = shader => {
+            Object.assign(shader.uniforms, cellUniforms);
+            shader.vertexShader = 'attribute float aLt; varying float vLt;\n'
+                + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vLt = aLt;');
+            shader.fragmentShader = 'varying float vLt; uniform vec3 uActColor; uniform vec3 uWtColor;\n'
+                + shader.fragmentShader.replace('vec4 diffuseColor = vec4( diffuse, opacity );',
+                    'vec4 diffuseColor = vec4( min(vec3(1.0), mix(uActColor, uWtColor, step(0.5, vLt)) * 1.25), opacity );');
+        };
+        // Append a flat ribbon (broad, with arrowhead) for `curve` into shared tri arrays.
+        function pushRibbon(curve, type, width, verts, lts) {
+            const total = curve.getLength() || 0.01, headLen = Math.min(1.1, total * 0.5), tHead = Math.max(0.02, 1 - headLen / total);
+            const segs = 10, ww = width * 0.5, headW = width * 2.3;
+            const perpAt = t => { const tg = curve.getTangent(t); let p = new THREE.Vector3(tg.y, -tg.x, 0); if (p.lengthSq() < 1e-6) p.set(1, 0, 0); return p.normalize(); };
+            const pushV = v => { verts.push(v.x, v.y, v.z); lts.push(type); };
+            let prev = curve.getPoint(0), prevP = perpAt(0), lastPoint = prev, lastPerp = prevP;
+            for (let i = 1; i <= segs; i++) {
+                const t = tHead * i / segs, cur = curve.getPoint(t), cp = perpAt(t);
+                const a = prev.clone().addScaledVector(prevP, ww), b = prev.clone().addScaledVector(prevP, -ww);
+                const c = cur.clone().addScaledVector(cp, ww), d = cur.clone().addScaledVector(cp, -ww);
+                pushV(a); pushV(b); pushV(d); pushV(a); pushV(d); pushV(c);
+                prev = cur; prevP = cp; lastPoint = cur; lastPerp = cp;
+            }
+            const tip = curve.getPoint(1), hL = lastPoint.clone().addScaledVector(lastPerp, headW), hR = lastPoint.clone().addScaledVector(lastPerp, -headW);
+            pushV(hL); pushV(hR); pushV(tip);
+        }
+        function linkCurve(link, incoming, outgoing, maxAbsX) {
+            const A = byId[link.a], B = byId[link.b];
+            if (link.spinePair) {
+                const p0 = new THREE.Vector3(A.pos[0], A.pos[1] - A.dy / 2 - 0.15, A.pos[2]);
+                const p1 = new THREE.Vector3(B.pos[0], B.pos[1] + B.dy / 2 + 0.15, B.pos[2]);
+                return p0.distanceTo(p1) > 0.05 ? { curve: new THREE.LineCurve3(p0, p1), type: 0, width: 0.52 } : null;
+            }
+            const horiz = Math.abs(B.pos[0] - A.pos[0]) > Math.abs(B.pos[1] - A.pos[1]);
+            let sideA = horiz ? (A.pos[0] < B.pos[0] ? 'right' : 'left') : (A.pos[1] > B.pos[1] ? 'bottom' : 'top');
+            let sideB = horiz ? (A.pos[0] < B.pos[0] ? 'left' : 'right') : (A.pos[1] > B.pos[1] ? 'top' : 'bottom');
+            if (Math.abs(A.pos[0] - B.pos[0]) < 1e-6) { sideA = 'bottom'; sideB = 'top'; }
+            const inL = incoming[link.b] || [], outL = outgoing[link.a] || [];
+            const p0 = spreadDock(getDockPoint(A, sideA), A, sideA, outL.indexOf(link), outL.length);
+            const p1 = spreadDock(getDockPoint(B, sideB), B, sideB, inL.indexOf(link), inL.length);
+            const cp1 = p0.clone(), cp2 = p1.clone(), push = Math.max(0.8, p0.distanceTo(p1) * 0.28);
+            if (link.skip) { const bow = maxAbsX + 2.5; cp1.x = bow; cp2.x = bow; }      // route residual skips around the side
+            else {
+                if (sideA === 'right') cp1.x += push; else if (sideA === 'left') cp1.x -= push; else if (sideA === 'bottom') cp1.y -= push; else cp1.y += push;
+                if (sideB === 'right') cp2.x += push; else if (sideB === 'left') cp2.x -= push; else if (sideB === 'bottom') cp2.y -= push; else cp2.y += push;
+            }
+            return { curve: new THREE.CubicBezierCurve3(p0, cp1, cp2, p1), type: link.t === 'w' ? 1 : 0, width: 0.26 };
+        }
+        function buildLinks() {
+            let maxAbsX = 1; blocks.forEach(b => { maxAbsX = Math.max(maxAbsX, Math.abs(b.pos[0]) + b.dx / 2); });
+            const incoming = {}, outgoing = {};
+            links.forEach(l => { (incoming[l.b] = incoming[l.b] || []).push(l); (outgoing[l.a] = outgoing[l.a] || []).push(l); });
+            const verts = [], lts = [];
+            for (const link of links) {
+                const c = linkCurve(link, incoming, outgoing, maxAbsX);
+                if (!c) continue;
+                pushRibbon(c.curve, c.type, c.width, verts, lts);   // always the broad flat-ribbon arrow, merged into one mesh
+            }
+            const geom = new THREE.BufferGeometry();
+            geom.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+            geom.setAttribute('aLt', new THREE.Float32BufferAttribute(lts, 1));
+            linkMesh = new THREE.Mesh(geom, linkMaterial);
+            linkMesh.frustumCulled = false; linkMesh.renderOrder = 2; scene.add(linkMesh);   // arrows draw after labels, blending over them while still depth-tested
+        }
+
+        /* ---- Centered labels that obey 3D occlusion ---- */
+        function roundRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath(); ctx.moveTo(x + radius, y); ctx.arcTo(x + width, y, x + width, y + height, radius);
+            ctx.arcTo(x + width, y + height, x, y + height, radius); ctx.arcTo(x, y + height, x, y, radius);
+            ctx.arcTo(x, y, x + width, y, radius); ctx.closePath();
+        }
+        // Pack every distinct label string into one atlas canvas → one texture. There are only
+        // a handful of distinct names (Query, Key, Wq, …) no matter how many blocks use them.
+        const LBL_CELL_H = 46, LBL_FONT = `600 30px ui-monospace, Menlo, monospace`;
+        function buildLabelAtlas(entries) {            // entries: [{name,type}] unique
+            const mc = document.createElement('canvas').getContext('2d'); mc.font = LBL_FONT;
+            const pad = 13, widths = entries.map(e => Math.ceil(mc.measureText(e.name).width) + pad * 2 + 8);
+            const maxW = Math.max(48, ...widths), cols = Math.max(1, Math.floor(1024 / maxW)), rows = Math.ceil(entries.length / cols);
+            const atlasW = cols * maxW, atlasH = rows * LBL_CELL_H;
+            const c = document.createElement('canvas'); c.width = atlasW; c.height = atlasH;
+            const ctx = c.getContext('2d'); ctx.font = LBL_FONT; ctx.textBaseline = 'middle';
+            const rect = {};
+            entries.forEach((e, i) => {
+                const col = i % cols, row = Math.floor(i / cols), x0 = col * maxW, y0 = row * LBL_CELL_H, w = widths[i], h = LBL_CELL_H - 6;
+                ctx.fillStyle = 'rgba(20, 24, 38, .96)'; roundRect(ctx, x0, y0 + 3, w, h, 9); ctx.fill();
+                ctx.fillStyle = e.type === 'w' ? '#7e88ff' : '#5bd99a'; ctx.fillRect(x0, y0 + 3, 6, h);
+                ctx.fillStyle = '#fff'; ctx.fillText(e.name, x0 + pad + 4, y0 + LBL_CELL_H / 2 + 1);
+                // uv rect (texture flipY=true → y measured from bottom)
+                rect[e.name] = { uv: [x0 / atlasW, 1 - (y0 + LBL_CELL_H) / atlasH, w / atlasW, LBL_CELL_H / atlasH], aspect: w / LBL_CELL_H };
+            });
+            const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4; tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false;
+            return { tex, rect };
+        }
+        // One instanced billboard quad per block, sampling its name from the atlas → labels on
+        // EVERY block at one draw call. Billboarding + sizing happen in the vertex shader.
+        const LBL_H = 1.15;
+        // depthWrite TRUE + alphaTest: the solid chip pixels occlude properly (a label behind a
+        // block is hidden; a label in front hides what's behind it) instead of always painting on top.
+        const labelMaterial = new THREE.MeshBasicMaterial({ transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.1, side: THREE.DoubleSide });
+        labelMaterial.onBeforeCompile = shader => {
+            shader.vertexShader = 'attribute vec4 aUv; attribute float aAspect; varying vec2 vAtlasUv;\n'
+                + shader.vertexShader
+                    .replace('#include <begin_vertex>', '#include <begin_vertex>\n vAtlasUv = aUv.xy + uv * aUv.zw;')
+                    .replace('#include <project_vertex>', `
+                        vec4 centerLocal = vec4(0.0,0.0,0.0,1.0);
+                        #ifdef USE_INSTANCING
+                          centerLocal = instanceMatrix * centerLocal;
+                        #endif
+                        vec4 mvPosition = modelViewMatrix * centerLocal;
+                        mvPosition.xy += (uv - 0.5) * vec2(${LBL_H.toFixed(2)} * aAspect, ${LBL_H.toFixed(2)});
+                        gl_Position = projectionMatrix * mvPosition;`);
+            shader.fragmentShader = 'varying vec2 vAtlasUv;\n'
+                + shader.fragmentShader.replace('#include <map_fragment>', `
+                    vec4 lt = texture2D(map, vAtlasUv);
+                    diffuseColor.rgb = lt.rgb; diffuseColor.a *= lt.a;`);
+        };
+        let labelMesh = null, labelGeom = null, labelAtlasTex = null;
+        const labelQuad = new THREE.PlaneGeometry(1, 1);
+        function buildLabels() {
+            const labeled = blocks.filter(b => !b.mute);
+            const uniq = new Map();
+            for (const b of labeled) if (!uniq.has(b.name)) uniq.set(b.name, b.t);
+            const atlas = buildLabelAtlas([...uniq].map(([name, type]) => ({ name, type })));
+            labelAtlasTex = atlas.tex; labelMaterial.map = atlas.tex; labelMaterial.needsUpdate = true;
+            const n = labeled.length, aUv = new Float32Array(n * 4), aAspect = new Float32Array(n);
+            labelGeom = labelQuad.clone();
+            const mesh = new THREE.InstancedMesh(labelGeom, labelMaterial, n);
+            for (let i = 0; i < n; i++) {
+                const b = labeled[i], r = atlas.rect[b.name];
+                dummyObject.position.set(b.pos[0], b.pos[1] + b.dy / 2 + 0.55, b.pos[2] + b.dz / 2 + 0.05);
+                dummyObject.scale.set(1, 1, 1); dummyObject.rotation.set(0, 0, 0); dummyObject.updateMatrix();
+                mesh.setMatrixAt(i, dummyObject.matrix);
+                aUv.set(r.uv, i * 4); aAspect[i] = r.aspect;
+            }
+            labelGeom.setAttribute('aUv', new THREE.InstancedBufferAttribute(aUv, 4));
+            labelGeom.setAttribute('aAspect', new THREE.InstancedBufferAttribute(aAspect, 1));
+            mesh.instanceMatrix.needsUpdate = true; mesh.frustumCulled = false; mesh.visible = showLabels;
+            labelMesh = mesh; labelMesh.renderOrder = 1; scene.add(mesh);   // labels write depth before arrows draw
+        }
+
+        /* ===== SCENE LIFECYCLE ===== */
+        let SPAN = { x: 10, y: 10, z: 6 };
+        const targetPos = new THREE.Vector3(0, 0, 0);
+        const currentSpherical = { th: 0.5, ph: 1.4, r: 60 }, targetSpherical = { th: 0.5, ph: 1.4, r: 60 };
+        let HOME_SPHERICAL = { th: 0.5, ph: 1.4, r: 60 }, FIT = 60, RMIN = 2, RMAX = 200;
+
+        let spanDiag = 60;
+        function applyCameraPositions() {
+            const { r, ph, th } = currentSpherical;
+            camera.position.set(targetPos.x + r * Math.sin(ph) * Math.sin(th), targetPos.y + r * Math.cos(ph), targetPos.z + r * Math.sin(ph) * Math.cos(th));
+            camera.lookAt(targetPos);
+            // Clip planes track the zoom so huge models neither clip (too-near far plane) nor
+            // z-fight (too-wide range): tight near when zoomed in, far enough to see the rest.
+            const near = Math.max(0.04, r * 0.012), far = r * 4 + Math.min(spanDiag * 1.6, r * 40 + 200);
+            if (near !== camera.near || far !== camera.far) { camera.near = near; camera.far = far; camera.updateProjectionMatrix(); }
+        }
+
+        function centerAndFrame(snap) {
+            let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9, minZ = 1e9, maxZ = -1e9;
+            for (const b of blocks) {
+                const [x, y, z] = b.pos;
+                minX = Math.min(minX, x - b.dx / 2); maxX = Math.max(maxX, x + b.dx / 2);
+                minY = Math.min(minY, y - b.dy / 2); maxY = Math.max(maxY, y + b.dy / 2);
+                minZ = Math.min(minZ, z - b.dz / 2); maxZ = Math.max(maxZ, z + b.dz / 2);
+            }
+            const center = [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2];
+            for (const b of blocks) { b.pos = [b.pos[0] - center[0], b.pos[1] - center[1], b.pos[2] - center[2]]; }
+            SPAN = { x: maxX - minX, y: maxY - minY, z: maxZ - minZ };
+            spanDiag = Math.hypot(SPAN.x, SPAN.y, SPAN.z);
+            const baseRadius = 0.5 * spanDiag;
+            FIT = (baseRadius / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) * 0.9;
+            RMIN = 0.5; RMAX = FIT * 1.8;       // RMIN is absolute so you can zoom right up to a single block at any model size
+            HOME_SPHERICAL = { th: 0.5, ph: 1.4, r: FIT * 1.06 };
+            if (snap) { Object.assign(targetSpherical, HOME_SPHERICAL); Object.assign(currentSpherical, HOME_SPHERICAL); targetPos.set(0, 0, 0); }
+        }
+
+        function clearScene() {
+            if (cellMesh) { scene.remove(cellMesh); cellMesh.dispose(); cellMesh = null; }   // cellMaterial is shared & reused; don't dispose it
+            if (cellGeom) { cellGeom.dispose(); cellGeom = null; }                            // per-build clone of tileGeometry
+            if (linkMesh) { scene.remove(linkMesh); linkMesh.geometry.dispose(); linkMesh = null; }   // linkMaterial is shared & reused
+            if (labelMesh) { scene.remove(labelMesh); labelMesh.dispose(); labelMesh = null; }       // labelMaterial is shared & reused
+            if (labelGeom) { labelGeom.dispose(); labelGeom = null; }
+            if (labelAtlasTex) { labelAtlasTex.dispose(); labelAtlasTex = null; }
+            blocks = []; links = []; byId = {};
+            hoveredBlock = null; outlineHelper.visible = false;
+        }
+
+        function buildScene(layoutResult, snap) {
+            blocks = layoutResult.blocks; links = layoutResult.links; byId = layoutResult.byId;
+            centerAndFrame(snap);
+            buildCells();
+            buildLinks();
+            buildLabels();
+        }
+
+        let firstBuild = true;
+        function rebuild(src, snap) {
+            const graph = parseModel(src);
+            const status = document.getElementById('e-status');
+            if (graph.errors.length) {
+                status.className = 'estatus err';
+                status.textContent = graph.errors.slice(0, 6).join('\n') + (graph.errors.length > 6 ? `\n…(+${graph.errors.length - 6})` : '');
+                return;                                   // keep the last good scene
+            }
+            clearScene();
+            buildScene(layoutGraph(graph), snap !== false || firstBuild);   // recenter on model switch; keep camera on live edits
+            firstBuild = false;
+            const nb = blocks.length, nw = blocks.filter(b => b.t === 'w').length;
+            status.className = 'estatus ok'; status.textContent = `✓ ${nb} tensors · ${nw} weights · ${links.length} flows`;
+            document.getElementById('cfg').textContent = `${nb} tensors`;
+        }
+
+        /* ===== CONTROLS & CAMERA ===== */
+        let dragMode = null, lastX = 0, lastY = 0, hoverX = -1, hoverY = -1, autoOrbit = false;
+        canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); dragMode = (e.button === 2 || e.shiftKey || e.button === 1) ? 'pan' : 'orbit'; lastX = e.clientX; lastY = e.clientY; autoOrbit = false; syncUI(); });
+        canvas.addEventListener('contextmenu', e => e.preventDefault());
+        canvas.addEventListener('pointermove', e => {
+            hoverX = e.clientX; hoverY = e.clientY; if (!dragMode) return;
+            const dx = e.clientX - lastX, dy = e.clientY - lastY; lastX = e.clientX; lastY = e.clientY;
+            if (dragMode === 'orbit') { const s = 0.005 * Math.max(0.18, Math.min(1.4, currentSpherical.r / Math.max(1, FIT))); targetSpherical.th -= dx * s; targetSpherical.ph = Math.max(0.08, Math.min(Math.PI - 0.08, targetSpherical.ph - dy * s)); }
+            else { const sensitivity = targetSpherical.r * 0.0016, rightVec = new THREE.Vector3().crossVectors(camera.getWorldDirection(new THREE.Vector3()), camera.up).normalize(); targetPos.addScaledVector(rightVec, -dx * sensitivity); targetPos.addScaledVector(camera.up.clone(), dy * sensitivity); }
+        });
+        canvas.addEventListener('pointerup', () => dragMode = null);
+        // Scroll is a pure dolly toward/away from the orbit centre (the model's bbox centre,
+        // which sits INSIDE the model) — so zooming in flies the camera through the front layers
+        // to the interior, while rotation always stays a clean turntable about that centre.
+        canvas.addEventListener('wheel', e => {
+            e.preventDefault();
+            const factor = Math.exp(Math.max(-0.5, Math.min(0.5, e.deltaY * 0.0014)));   // fine on trackpads, proportional on wheels
+            targetSpherical.r = Math.max(RMIN, Math.min(RMAX, targetSpherical.r * factor));
+        }, { passive: false });
+        let pinchDistance = 0;
+        canvas.addEventListener('touchmove', e => { if (e.touches.length === 2) { const distance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (pinchDistance) targetSpherical.r = Math.max(RMIN, Math.min(RMAX, targetSpherical.r * (pinchDistance / distance))); pinchDistance = distance; } }, { passive: true });
+        canvas.addEventListener('touchend', () => pinchDistance = 0);
+
+        /* ---- Object hovering & inspect ---- */
+        const raycaster = new THREE.Raycaster(), mouseNDC = new THREE.Vector2(); let hoveredBlock = null;
+        const outlineHelper = new THREE.Box3Helper(new THREE.Box3(new THREE.Vector3(), new THREE.Vector3(0.01, 0.01, 0.01)), 0x21a05a);
+        outlineHelper.material.transparent = true; outlineHelper.material.opacity = 0.95; outlineHelper.visible = false; scene.add(outlineHelper);
+        const inspectPanel = document.getElementById('inspect');
+        // value at (row i, col j) of a tensor — real seeded value over the TRUE index space
+        const elemVal = (id, i, j) => cellVal(id, j, i);
+        const fmtN = n => n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : '' + n;
+        // Build a real per-element computation for the hovered op, evaluated over the TRUE dims.
+        function realCompute(block) {
+            const [r, c] = block.shape, ins = block.ins || [];
+            if (block.kind === 'input') return `seeded tensor · ${fmtN(r * c)} elements`;
+            if (block.kind === 'param') return `learnable weight · ${fmtN(r * c)} params`;
+            const A = ins[0], B = ins[1];
+            if (block.op === 'matmul' && A && B) {
+                const K = A.shape[1];                                  // real reduction dim
+                let acc = 0; for (let k = 0; k < K; k++) acc += elemVal(A.id, 0, k) * elemVal(B.id, k, 0);
+                return `out[i,j] = Σₖ ${A.name}[i,k]·${B.name}[k,j]   k=1..${fmtN(K)}\n`
+                     + `out[0,0] = ${acc.toFixed(4)}   (real Σ over ${fmtN(K)} terms)\n`
+                     + `${fmtN(2 * r * c * K)} FLOPs`;
+            }
+            if ((block.op === 'add' || block.op === 'sub' || block.op === 'mul') && A && B) {
+                const sym = block.op === 'add' ? '+' : block.op === 'sub' ? '−' : '⊙';
+                const v = block.op === 'mul' ? elemVal(A.id, 0, 0) * elemVal(B.id, 0, 0)
+                        : block.op === 'sub' ? elemVal(A.id, 0, 0) - elemVal(B.id, 0, 0)
+                        : elemVal(A.id, 0, 0) + elemVal(B.id, 0, 0);
+                return `out[i,j] = ${A.name}[i,j] ${sym} ${B.name}[i,j]\nout[0,0] = ${v.toFixed(4)}   (elementwise · ${fmtN(r * c)} ops)`;
+            }
+            if (A) return `${block.op}(${A.name}) · applied elementwise over [${r} × ${c}]`;
+            return '';
+        }
+        function showInspectPanel(block) {
+            inspectPanel.classList.add('show');
+            const tagEl = document.getElementById('i-tag'); tagEl.textContent = block.t === 'w' ? 'weight' : 'activation'; tagEl.style.color = block.t === 'w' ? '#3b46d6' : '#21a05a';
+            document.getElementById('i-name').textContent = block.name;
+            document.getElementById('i-shape').textContent = `[${block.shape[0]} × ${block.shape[1]}]  (true dims · shown log-scaled)`;
+            document.getElementById('i-meta').textContent = `${fmtN(block.shape[0] * block.shape[1])} elements`;
+            document.getElementById('i-eq').textContent = block.eq;
+            document.getElementById('i-compute').textContent = realCompute(block);
+        }
+        // Picking is a ray vs. per-block AABB sweep (cells share one mesh, so we can't
+        // raycast individual blocks). Brute force over block boxes is cheap and exact.
+        const _pickHit = new THREE.Vector3();
+        function handlePicking() {
+            if (hoverX < 0 || !blocks.length) return;
+            mouseNDC.x = (hoverX / window.innerWidth) * 2 - 1; mouseNDC.y = -(hoverY / window.innerHeight) * 2 + 1; raycaster.setFromCamera(mouseNDC, camera);
+            let best = null, bestD = Infinity;
+            for (const b of blocks) {
+                if (raycaster.ray.intersectBox(b.box, _pickHit)) {
+                    const d = raycaster.ray.origin.distanceToSquared(_pickHit);
+                    if (d < bestD) { bestD = d; best = b; }
+                }
+            }
+            if (best) {
+                if (hoveredBlock !== best) { hoveredBlock = best; outlineHelper.box.copy(best.box); outlineHelper.material.color.set(best.t === 'w' ? 0x7e88ff : 0x5bd99a); outlineHelper.visible = true; showInspectPanel(best); }
+                canvas.style.cursor = 'pointer';
+            } else { hoveredBlock = null; outlineHelper.visible = false; inspectPanel.classList.remove('show'); canvas.style.cursor = dragMode ? 'grabbing' : 'grab'; }
+        }
+
+        /* ---- UI buttons ---- */
+        const uiButtons = { rot: document.getElementById('b-rot'), lab: document.getElementById('b-lab'), reset: document.getElementById('b-reset') };
+        let showLabels = true;
+        function syncUI() { uiButtons.rot.dataset.on = autoOrbit; uiButtons.lab.dataset.on = showLabels; }
+        uiButtons.rot.onclick = () => { autoOrbit = !autoOrbit; syncUI(); };
+        uiButtons.lab.onclick = () => { showLabels = !showLabels; if (labelMesh) labelMesh.visible = showLabels; syncUI(); };
+        uiButtons.reset.onclick = () => { Object.assign(targetSpherical, HOME_SPHERICAL); targetPos.set(0, 0, 0); autoOrbit = false; syncUI(); };
+        syncUI();
+
+        /* ---- Colour theme (live cell tint + brightness) ---- */
+        const THEMES = [
+            { name: 'Indigo', act: [0.42, 0.66, 0.46], wt: [0.40, 0.40, 0.78] },
+            { name: 'Ocean', act: [0.30, 0.72, 0.74], wt: [0.27, 0.45, 0.85] },
+            { name: 'Sunset', act: [0.95, 0.66, 0.30], wt: [0.85, 0.30, 0.52] },
+            { name: 'Forest', act: [0.40, 0.72, 0.42], wt: [0.55, 0.42, 0.26] },
+            { name: 'Grape', act: [0.55, 0.78, 0.40], wt: [0.55, 0.35, 0.80] },
+            { name: 'Mono', act: [0.62, 0.66, 0.72], wt: [0.34, 0.37, 0.44] },
+        ];
+        const css255 = (rgb, br) => `rgb(${rgb.map(c => Math.round(Math.min(1, c * br * 1.15) * 255)).join(',')})`;
+        const swA = document.getElementById('sw-a'), swW = document.getElementById('sw-w');
+        const brA = document.getElementById('br-a'), brW = document.getElementById('br-w');
+        let theme = THEMES[0];
+        function applyTheme(refreshChips) {
+            cellUniforms.uActColor.value.setRGB(theme.act[0], theme.act[1], theme.act[2]);
+            cellUniforms.uWtColor.value.setRGB(theme.wt[0], theme.wt[1], theme.wt[2]);
+            cellUniforms.uActBright.value = +brA.value; cellUniforms.uWtBright.value = +brW.value;
+            if (refreshChips) { swA.style.background = css255(theme.act, +brA.value); swW.style.background = css255(theme.wt, +brW.value); }
+        }
+        const presetsEl = document.getElementById('presets');
+        THEMES.forEach((t, i) => {
+            const el = document.createElement('div'); el.className = 'preset'; el.dataset.on = i === 0;
+            el.innerHTML = `<span class="sw"><i style="background:${css255(t.wt, 1)}"></i><i style="background:${css255(t.act, 1)}"></i></span><span>${t.name}</span>`;
+            el.onclick = () => { theme = t; for (const c of presetsEl.children) c.dataset.on = c === el; applyTheme(true); };
+            presetsEl.appendChild(el);
+        });
+        brA.oninput = () => applyTheme(true); brW.oninput = () => applyTheme(true);
+        document.getElementById('theme-btn').onclick = () => { const p = document.getElementById('palette'); p.hidden = !p.hidden; };
+        applyTheme(true);
+
+        /* ===== MODEL PRESETS =====
+           Five deliberately-different architectures. Switching a tab just swaps the equations —
+           the SAME layout engine renders them all. Dims are kept small for visual clarity;
+           the topology (the part that matters) is authentic. */
+        const MODELS = [
+{ id: 'gpt', name: 'Transformer', cat: 'Transformer', card: { full: 'Transformer (decoder)', year: '2017', params: '~0.1M (toy)', props: ['MHA', 'Decoder-only', 'Residual + LN'], blurb: 'The original self-attention block — “Attention Is All You Need”.' }, dsl:
+`# Transformer (nano-GPT) — written in a PyTorch-flavoured syntax:
+#   @ = matmul,  + - = elementwise,  * = hadamard/scale,  .T = transpose,
+#   cat([...]) = concat,  Input(r,c) / Parameter(r,c) = leaves, f(x) = ops.
+# A block is a tensor that lives in memory (Input / Parameter / named result);
+# transient ops (.T, an inner @) fold into the equation. The H heads share a
+# role at the same depth-layer, so the engine stacks them behind each other in Z.
+T = 6        # sequence length
+C = 24       # model width  (d_model)
+H = 4        # attention heads
+A = C / H    # per-head width  (d_k)
+F = 96       # mlp hidden width
+V = 10       # vocab size
+
+Embed = Input(T, C)                              # token + position embedding
+Stream = Embed                                   # the residual stream
+
+for l in 0..2 {
+  # ---------- multi-head self-attention ----------
+  LN1 = layernorm(Stream)
+  for h in 0..4 {
+    Wq$l$h = Parameter(C, A)
+    Wk$l$h = Parameter(C, A)
+    Wv$l$h = Parameter(C, A)
+    Query$l$h = LN1 @ Wq$l$h
+    Key$l$h   = LN1 @ Wk$l$h
+    Value$l$h = LN1 @ Wv$l$h
+    Attention$l$h = softmax(Query$l$h @ Key$l$h.T)
+    Context$l$h   = Attention$l$h @ Value$l$h
+  }
+  Heads = cat([Context$l_0, Context$l_1, Context$l_2, Context$l_3])
+  Wo$l = Parameter(C, C)
+  AttnOut = Heads @ Wo$l
+  Stream = Stream + AttnOut                       # residual
+
+  # ---------- feed-forward (mlp) ----------
+  LN2 = layernorm(Stream)
+  W1$l = Parameter(C, F)
+  W2$l = Parameter(F, C)
+  Hidden = gelu(LN2 @ W1$l)
+  MLPOut = Hidden @ W2$l
+  Stream = Stream + MLPOut                        # residual
+}
+
+LNf = layernorm(Stream)
+Wout = Parameter(C, V)
+Logits = LNf @ Wout
+Probs = softmax(Logits)
+` },
+
+{ id: 'resnet', name: 'ResNet', cat: 'Convolutional', card: { full: 'ResNet', year: '2015', params: '25M', props: ['Residual', 'Conv', 'Skip connections'], blurb: 'Identity skip connections let very deep conv nets train.' }, dsl:
+`# ResNet — a convolutional residual network (schematic dims).
+# Feature maps are [spatial x channels]: conv mixes channels, pool halves space.
+# Purely sequential (no parallel branches), so the engine keeps it planar.
+S = 16       # flattened spatial size
+Cin = 3      # input channels (RGB)
+C1 = 16
+C2 = 32
+C3 = 64
+
+Image = Input(S, Cin)
+Wstem = Parameter(Cin, C1)
+X = relu(conv(Image, Wstem))         # stem
+
+# ---- stage 1 : residual blocks at C1 ----
+for b in 0..2 {
+  Wa$b = Parameter(C1, C1)
+  Wb$b = Parameter(C1, C1)
+  Res = relu(conv(X, Wa$b))
+  Res = conv(Res, Wb$b)
+  X = relu(X + Res)                  # identity residual
+}
+
+# ---- stage 2 : downsample, widen to C2 ----
+Half = pool(X, 2)
+Wp1 = Parameter(C1, C2)
+X = relu(conv(Half, Wp1))
+for b in 0..2 {
+  Wc$b = Parameter(C2, C2)
+  Wd$b = Parameter(C2, C2)
+  Res = relu(conv(X, Wc$b))
+  Res = conv(Res, Wd$b)
+  X = relu(X + Res)
+}
+
+# ---- stage 3 : downsample, widen to C3 ----
+Quarter = pool(X, 2)
+Wp2 = Parameter(C2, C3)
+X = relu(conv(Quarter, Wp2))
+
+# ---- classifier head ----
+Pooled = pool(X, 4)                  # global average pool
+Wfc = Parameter(C3, 10)
+Logits = Pooled @ Wfc
+Probs = softmax(Logits)
+` },
+
+{ id: 'unet', name: 'U-Net', cat: 'Convolutional', card: { full: 'U-Net', year: '2015', params: '31M', props: ['Encoder–decoder', 'Long skips', 'Upsampling'], blurb: 'Symmetric down/up path with skip concats; basis of diffusion UNets.' }, dsl:
+`# U-Net — encoder / decoder with long skip connections (segmentation, diffusion).
+# The encoder pools down; the decoder upsamples and concatenates the matching
+# encoder map. Those skips jump across many layers — watch them bow round the side.
+S = 16
+Cin = 1
+C1 = 8
+C2 = 16
+C3 = 32
+Cc2 = C3 + C2   # channels after skip-concat at 1/2 res
+Cc1 = C2 + C1   # channels after skip-concat at full res
+
+Image = Input(S, Cin)
+
+# ---------- encoder ----------
+We1 = Parameter(Cin, C1)
+E1 = relu(conv(Image, We1))          # full res,  C1
+P1 = pool(E1, 2)
+We2 = Parameter(C1, C2)
+E2 = relu(conv(P1, We2))             # 1/2 res,   C2
+P2 = pool(E2, 2)
+We3 = Parameter(C2, C3)
+Mid = relu(conv(P2, We3))            # 1/4 res,   bottleneck
+
+# ---------- decoder (upsample + skip-concat) ----------
+U2 = upsample(Mid, 2)
+Cat2 = cat([U2, E2])                 # skip from E2
+Wd2 = Parameter(Cc2, C2)
+D2 = relu(conv(Cat2, Wd2))
+U1 = upsample(D2, 2)
+Cat1 = cat([U1, E1])                 # skip from E1
+Wd1 = Parameter(Cc1, C1)
+D1 = relu(conv(Cat1, Wd1))
+
+Wout = Parameter(C1, 2)
+Mask = conv(D1, Wout)                # per-pixel logits
+` },
+
+{ id: 'moe', name: 'Mixture-of-Experts', cat: 'Sparse', card: { full: 'Mixture-of-Experts', year: '2017', params: 'varies', props: ['Sparse routing', 'Parallel experts', 'Gating'], blurb: 'A gate routes each token to a few parallel expert MLPs.' }, dsl:
+`# Mixture-of-Experts — a gate routes tokens to N parallel expert MLPs.
+# The experts share a role at one layer, exactly like attention heads, so the
+# SAME rule stacks them in depth. The gate stays on the centre spine; the
+# weighted sum gathers every expert lane back together.
+T = 8        # tokens
+C = 24       # model width
+F = 48       # expert hidden width
+E = 4        # number of experts
+
+X = Input(T, C)
+Wg = Parameter(C, E)
+Gate = softmax(X @ Wg)               # router distribution  [T x E]
+
+for e in 0..4 {
+  W1$e = Parameter(C, F)
+  W2$e = Parameter(F, C)
+  Up$e = gelu(X @ W1$e)
+  Expert$e = Up$e @ W2$e             # expert output  [T x C]
+}
+
+Combined = Expert_0 + Expert_1 + Expert_2 + Expert_3
+Wo = Parameter(C, C)
+Y = Combined @ Wo
+` },
+
+{ id: 'lstm', name: 'LSTM', cat: 'Recurrent', card: { full: 'LSTM', year: '1997', params: 'varies', props: ['Gated recurrence', 'Cell state', '4 gates'], blurb: 'Input/forget/output gates plus a cell state carried through time.' }, dsl:
+`# LSTM — gated recurrence, unrolled over time. State & Cell are carried forward
+# and reassigned every step (just like a residual stream), so the recurrence
+# flows DOWN the page. The 8 gate weights are defined once and shared across all
+# time steps — that is why their flows fan out to every step.
+T = 4        # time steps (unrolled)
+D = 8        # input width
+H = 16       # hidden width
+
+X = Input(T, D)                      # shared input sequence
+Wxi = Parameter(D, H)
+Whi = Parameter(H, H)
+Wxf = Parameter(D, H)
+Whf = Parameter(H, H)
+Wxo = Parameter(D, H)
+Who = Parameter(H, H)
+Wxg = Parameter(D, H)
+Whg = Parameter(H, H)
+
+State = Input(T, H)                  # h0
+Cell = Input(T, H)                   # c0
+
+for t in 0..4 {
+  Inp  = sigmoid(X @ Wxi + State @ Whi)    # input gate
+  Frg  = sigmoid(X @ Wxf + State @ Whf)    # forget gate
+  Otp  = sigmoid(X @ Wxo + State @ Who)    # output gate
+  Cand = tanh(X @ Wxg + State @ Whg)       # candidate
+  Cell  = Frg * Cell + Inp * Cand          # new cell state
+  State = Otp * tanh(Cell)                 # new hidden state
+}
+
+Wout = Parameter(H, 10)
+Logits = State @ Wout
+Probs = softmax(Logits)
+` },
+
+{ id: 'gpt3', name: 'GPT-3', cat: 'Transformer', card: { full: 'GPT-3 175B', year: '2020', params: '175B', props: ['MHA', 'Decoder-only', '96 layers × 96 heads', 'Real scale'], blurb: 'The full 175B decoder — every layer & head rendered, sizes log-scaled.' }, dsl:
+`# GPT-3 175B — the SAME decoder-only transformer as the first tab, at FULL real scale:
+# 96 layers, 96 heads, d_model 12288, d_ff 49152, ctx 2048, vocab 50257. Every layer and
+# head below is real — nothing is reduced. Only the matrix SIZES are drawn log-scaled
+# (hover any block to see its true dims + a real per-element computation).
+T = 2048     # sequence length
+C = 12288    # model width  d_model
+H = 96       # attention heads
+A = C / H    # per-head width  d_k  = 128
+F = 49152    # mlp hidden width  4*C
+V = 50257    # vocab size
+
+Embed = Input(T, C)                              # token + position embedding
+Stream = Embed                                   # the residual stream
+
+for l in 0..96 {
+  # ---------- multi-head self-attention (96 heads) ----------
+  LN1 = layernorm(Stream)
+  for h in 0..96 {
+    Wq$l$h = Parameter(C, A)
+    Wk$l$h = Parameter(C, A)
+    Wv$l$h = Parameter(C, A)
+    Query$l$h = LN1 @ Wq$l$h
+    Key$l$h   = LN1 @ Wk$l$h
+    Value$l$h = LN1 @ Wv$l$h
+    Attention$l$h = softmax(Query$l$h @ Key$l$h.T)
+    Context$l$h   = Attention$l$h @ Value$l$h
+  }
+  Heads = cat([${Array.from({ length: 96 }, (_, h) => 'Context$l_' + h).join(', ')}])
+  Wo$l = Parameter(C, C)
+  AttnOut = Heads @ Wo$l
+  Stream = Stream + AttnOut                       # residual
+
+  # ---------- feed-forward (mlp) ----------
+  LN2 = layernorm(Stream)
+  W1$l = Parameter(C, F)
+  W2$l = Parameter(F, C)
+  Hidden = gelu(LN2 @ W1$l)
+  MLPOut = Hidden @ W2$l
+  Stream = Stream + MLPOut                        # residual
+}
+
+LNf = layernorm(Stream)
+Wout = Parameter(C, V)
+Logits = LNf @ Wout
+Probs = softmax(Logits)
+` },
+
+{ id: 'bert', name: 'BERT', cat: 'Transformer', card: { full: 'BERT', year: '2018', params: '110M', props: ['MHA', 'Encoder-only', 'Bidirectional', '[CLS] pooler'], blurb: 'Bidirectional encoder pretrained with masked-language-modelling.' }, dsl:
+`# BERT — bidirectional Transformer ENCODER (no causal mask), post-LayerNorm.
+T = 8        # tokens (incl. [CLS])
+C = 32       # hidden width
+H = 4        # heads
+A = C / H
+F = 128      # ffn width
+
+Tokens = Input(T, C)                 # token + segment + position embeddings
+Stream = Tokens
+for l in 0..3 {
+  for h in 0..4 {
+    Wq$l$h = Parameter(C, A)
+    Wk$l$h = Parameter(C, A)
+    Wv$l$h = Parameter(C, A)
+    Q$l$h = Stream @ Wq$l$h
+    K$l$h = Stream @ Wk$l$h
+    V$l$h = Stream @ Wv$l$h
+    Head$l$h = softmax(Q$l$h @ K$l$h.T) @ V$l$h     # attends both directions
+  }
+  Heads = cat([Head$l_0, Head$l_1, Head$l_2, Head$l_3])
+  Wo$l = Parameter(C, C)
+  Stream = layernorm(Stream + Heads @ Wo$l)          # post-norm residual
+  W1$l = Parameter(C, F)
+  W2$l = Parameter(F, C)
+  Stream = layernorm(Stream + gelu(Stream @ W1$l) @ W2$l)
+}
+Wpool = Parameter(C, C)
+Pooled = tanh(Stream @ Wpool)        # [CLS] pooler
+Wcls = Parameter(C, 2)
+Logits = Pooled @ Wcls
+Probs = softmax(Logits)
+` },
+
+{ id: 'vit', name: 'Vision Transformer', cat: 'Transformer', card: { full: 'Vision Transformer', year: '2020', params: '86M', props: ['MHA', 'Patch embed', 'Encoder', 'Image classification'], blurb: 'Splits an image into patches and runs a plain transformer encoder.' }, dsl:
+`# Vision Transformer (ViT) — an image becomes a sequence of patch embeddings,
+# then a plain Transformer encoder; classification reads the final features.
+P = 16       # patches (e.g. a 4x4 grid)
+D = 48       # patch-embedding dim
+H = 4
+A = D / H
+F = 192
+
+Patches = Input(P, D)                # linear patch projection + position embedding
+Stream = Patches
+for l in 0..3 {
+  LN1 = layernorm(Stream)
+  for h in 0..4 {
+    Wq$l$h = Parameter(D, A)
+    Wk$l$h = Parameter(D, A)
+    Wv$l$h = Parameter(D, A)
+    Q$l$h = LN1 @ Wq$l$h
+    K$l$h = LN1 @ Wk$l$h
+    V$l$h = LN1 @ Wv$l$h
+    Head$l$h = softmax(Q$l$h @ K$l$h.T) @ V$l$h
+  }
+  Heads = cat([Head$l_0, Head$l_1, Head$l_2, Head$l_3])
+  Wo$l = Parameter(D, D)
+  Stream = Stream + Heads @ Wo$l
+  LN2 = layernorm(Stream)
+  W1$l = Parameter(D, F)
+  W2$l = Parameter(F, D)
+  Stream = Stream + gelu(LN2 @ W1$l) @ W2$l
+}
+LNf = layernorm(Stream)
+Wcls = Parameter(D, 10)
+Logits = LNf @ Wcls
+Probs = softmax(Logits)
+` },
+
+{ id: 'llama', name: 'Llama', cat: 'Transformer', card: { full: 'Llama', year: '2023', params: '7B–70B', props: ['GQA', 'RMSNorm', 'SwiGLU', 'RoPE'], blurb: 'Grouped-query attention + SwiGLU MLP — the modern open-LLM recipe.' }, dsl:
+`# Llama — modern decoder LLM: RMSNorm (shown as layernorm), Grouped-Query
+# Attention (4 query heads SHARE 2 key/value heads) and a SwiGLU MLP.
+T = 8
+C = 32
+A = 8        # head dim
+F = 96       # SwiGLU hidden
+V = 30
+
+Tokens = Input(T, C)
+Stream = Tokens
+for l in 0..2 {
+  Norm1 = layernorm(Stream)                # RMSNorm
+  # 2 KV heads, each shared by 2 query heads (GQA)
+  for g in 0..2 {
+    Wk$l$g = Parameter(C, A)
+    Wv$l$g = Parameter(C, A)
+    K$l$g = Norm1 @ Wk$l$g
+    V$l$g = Norm1 @ Wv$l$g
+    for j in 0..2 {
+      Wq$l$g$j = Parameter(C, A)
+      Q$l$g$j = Norm1 @ Wq$l$g$j            # RoPE applied here (folded)
+      Head$l$g$j = softmax(Q$l$g$j @ K$l$g.T) @ V$l$g
+    }
+  }
+  Heads = cat([Head$l_0_0, Head$l_0_1, Head$l_1_0, Head$l_1_1])
+  Wo$l = Parameter(C, C)
+  Stream = Stream + Heads @ Wo$l
+  # SwiGLU feed-forward:  (SiLU(x@Wg) * (x@Wu)) @ Wd
+  Norm2 = layernorm(Stream)
+  Wg$l = Parameter(C, F)
+  Wu$l = Parameter(C, F)
+  Wd$l = Parameter(F, C)
+  Stream = Stream + (gelu(Norm2 @ Wg$l) * (Norm2 @ Wu$l)) @ Wd$l
+}
+Normf = layernorm(Stream)
+Wout = Parameter(C, V)
+Logits = Normf @ Wout
+Probs = softmax(Logits)
+` },
+
+{ id: 't5', name: 'T5', cat: 'Transformer', card: { full: 'T5', year: '2019', params: '220M–11B', props: ['Encoder–decoder', 'Cross-attention', 'Seq2seq'], blurb: 'Text-to-text encoder–decoder; the decoder cross-attends to the encoder.' }, dsl:
+`# T5 — encoder–decoder. The decoder runs masked self-attention AND cross-attention
+# that reads the encoder output (watch those flows bridge the two towers).
+Tin = 8      # source length
+Tout = 6     # target length
+C = 32
+H = 4
+A = C / H
+F = 128
+V = 30
+
+# ================= ENCODER =================
+Src = Input(Tin, C)
+Enc = Src
+for l in 0..2 {
+  for h in 0..4 {
+    Weq$l$h = Parameter(C, A)
+    Wek$l$h = Parameter(C, A)
+    Wev$l$h = Parameter(C, A)
+    Eq$l$h = Enc @ Weq$l$h
+    Ek$l$h = Enc @ Wek$l$h
+    Ev$l$h = Enc @ Wev$l$h
+    EHead$l$h = softmax(Eq$l$h @ Ek$l$h.T) @ Ev$l$h
+  }
+  Weo$l = Parameter(C, C)
+  Enc = layernorm(Enc + cat([EHead$l_0, EHead$l_1, EHead$l_2, EHead$l_3]) @ Weo$l)
+  We1$l = Parameter(C, F)
+  We2$l = Parameter(F, C)
+  Enc = layernorm(Enc + relu(Enc @ We1$l) @ We2$l)
+}
+
+# ================= DECODER =================
+Tgt = Input(Tout, C)
+Dec = Tgt
+for d in 0..2 {
+  # masked self-attention
+  for h in 0..4 {
+    Wsq$d$h = Parameter(C, A)
+    Wsk$d$h = Parameter(C, A)
+    Wsv$d$h = Parameter(C, A)
+    Sq$d$h = Dec @ Wsq$d$h
+    Sk$d$h = Dec @ Wsk$d$h
+    Sv$d$h = Dec @ Wsv$d$h
+    SHead$d$h = softmax(Sq$d$h @ Sk$d$h.T) @ Sv$d$h
+  }
+  Wso$d = Parameter(C, C)
+  Dec = layernorm(Dec + cat([SHead$d_0, SHead$d_1, SHead$d_2, SHead$d_3]) @ Wso$d)
+  # cross-attention: queries from decoder, keys/values from the ENCODER
+  for h in 0..4 {
+    Wcq$d$h = Parameter(C, A)
+    Wck$d$h = Parameter(C, A)
+    Wcv$d$h = Parameter(C, A)
+    Cq$d$h = Dec @ Wcq$d$h
+    Ck$d$h = Enc @ Wck$d$h
+    Cv$d$h = Enc @ Wcv$d$h
+    CHead$d$h = softmax(Cq$d$h @ Ck$d$h.T) @ Cv$d$h
+  }
+  Wco$d = Parameter(C, C)
+  Dec = layernorm(Dec + cat([CHead$d_0, CHead$d_1, CHead$d_2, CHead$d_3]) @ Wco$d)
+  Wd1$d = Parameter(C, F)
+  Wd2$d = Parameter(F, C)
+  Dec = layernorm(Dec + relu(Dec @ Wd1$d) @ Wd2$d)
+}
+Wout = Parameter(C, V)
+Logits = Dec @ Wout
+Probs = softmax(Logits)
+` },
+
+{ id: 'mixtral', name: 'Mixtral', cat: 'Sparse', card: { full: 'Mixtral 8×7B', year: '2023', params: '47B (13B active)', props: ['MHA', 'Sparse MoE FFN', 'Top-2 of 8'], blurb: 'A transformer whose FFN is replaced by a sparse 8-expert MoE.' }, dsl:
+`# Mixtral 8x7B — a Transformer whose feed-forward is a SPARSE Mixture-of-Experts:
+# a router scores 8 experts and the top-2 are combined. Experts stack in depth.
+T = 8
+C = 32
+H = 4
+A = C / H
+F = 96
+Ne = 8       # experts
+
+Tokens = Input(T, C)
+Stream = Tokens
+for l in 0..2 {
+  LN1 = layernorm(Stream)
+  for h in 0..4 {
+    Wq$l$h = Parameter(C, A)
+    Wk$l$h = Parameter(C, A)
+    Wv$l$h = Parameter(C, A)
+    Head$l$h = softmax((LN1 @ Wq$l$h) @ (LN1 @ Wk$l$h).T) @ (LN1 @ Wv$l$h)
+  }
+  Wo$l = Parameter(C, C)
+  Stream = Stream + cat([Head$l_0, Head$l_1, Head$l_2, Head$l_3]) @ Wo$l
+  # ---- sparse MoE feed-forward (router + 8 experts) ----
+  LN2 = layernorm(Stream)
+  Wgate$l = Parameter(C, Ne)
+  Router$l = softmax(LN2 @ Wgate$l)        # per-token expert scores  [T x 8]
+  for e in 0..8 {
+    W1$l$e = Parameter(C, F)
+    W2$l$e = Parameter(F, C)
+    Expert$l$e = gelu(LN2 @ W1$l$e) @ W2$l$e
+  }
+  MoE = Expert$l_0 + Expert$l_1 + Expert$l_2 + Expert$l_3 + Expert$l_4 + Expert$l_5 + Expert$l_6 + Expert$l_7
+  Stream = Stream + MoE
+}
+LNf = layernorm(Stream)
+Wout = Parameter(C, 30)
+Logits = LNf @ Wout
+Probs = softmax(Logits)
+` },
+
+{ id: 'vgg', name: 'VGG', cat: 'Convolutional', card: { full: 'VGG', year: '2014', params: '138M', props: ['Plain conv stack', '3×3 convs', 'No skips'], blurb: 'A deep, uniform stack of 3×3 convolutions — no shortcuts.' }, dsl:
+`# VGG — a deep, uniform stack of 3x3 convolutions with pooling between blocks.
+# No skip connections (contrast ResNet): just conv -> conv -> pool, repeated.
+S = 16
+Cin = 3
+C1 = 16
+C2 = 32
+C3 = 64
+
+Image = Input(S, Cin)
+Wa = Parameter(Cin, C1)
+X = relu(conv(Image, Wa))
+Wb = Parameter(C1, C1)
+X = relu(conv(X, Wb))
+X = pool(X, 2)
+Wc = Parameter(C1, C2)
+X = relu(conv(X, Wc))
+Wd = Parameter(C2, C2)
+X = relu(conv(X, Wd))
+X = pool(X, 2)
+We = Parameter(C2, C3)
+X = relu(conv(X, We))
+Wf = Parameter(C3, C3)
+X = relu(conv(X, Wf))
+X = pool(X, 2)
+Wfc1 = Parameter(C3, 128)
+Hh = relu(X @ Wfc1)
+Wfc2 = Parameter(128, 10)
+Logits = Hh @ Wfc2
+Probs = softmax(Logits)
+` },
+
+{ id: 'inception', name: 'Inception', cat: 'Convolutional', card: { full: 'Inception / GoogLeNet', year: '2014', params: '6.8M', props: ['Parallel branches', 'Multi-scale', 'Concat'], blurb: 'Runs 1×1 / 3×3 / 5×5 / pool branches in parallel and concatenates.' }, dsl:
+`# Inception (GoogLeNet) module — FOUR parallel branches over the same input,
+# concatenated along channels. The branches share a layer, so they fan into depth.
+S = 16
+Cin = 24
+B1 = 8       # 1x1 branch
+B3 = 12      # 3x3 branch
+B5 = 6       # 5x5 branch
+Bp = 6       # pool branch
+Cm = B1 + B3 + B5 + Bp
+
+X = Input(S, Cin)
+Wa = Parameter(Cin, B1)
+Bra = relu(conv(X, Wa))              # 1x1
+Wb = Parameter(Cin, B3)
+Brb = relu(conv(X, Wb))              # 3x3
+Wc = Parameter(Cin, B5)
+Brc = relu(conv(X, Wc))              # 5x5
+Pp = pool(X, 1)
+Wd = Parameter(Cin, Bp)
+Brd = relu(conv(Pp, Wd))             # pool -> 1x1
+Mixed = cat([Bra, Brb, Brc, Brd])    # concat the branches
+Pooled = pool(Mixed, 4)
+Wfc = Parameter(Cm, 10)
+Logits = Pooled @ Wfc
+Probs = softmax(Logits)
+` },
+
+{ id: 'mobilenet', name: 'MobileNet', cat: 'Convolutional', card: { full: 'MobileNet', year: '2017', params: '4.2M', props: ['Depthwise separable', 'Pointwise 1×1', 'Efficient'], blurb: 'Factorises convolution into depthwise + pointwise for mobile.' }, dsl:
+`# MobileNet — depthwise-separable convolution: a per-channel DEPTHWISE conv
+# (no channel mixing) then a 1x1 POINTWISE conv that mixes channels.
+S = 16
+Cin = 3
+C1 = 16
+C2 = 32
+C3 = 64
+
+Image = Input(S, Cin)
+Wstem = Parameter(Cin, C1)
+X = relu(conv(Image, Wstem))         # standard stem
+Wdw1 = Parameter(C1, C1)             # depthwise (spatial)
+X = relu(conv(X, Wdw1))
+Wpw1 = Parameter(C1, C2)             # pointwise 1x1 (mix channels)
+X = relu(conv(X, Wpw1))
+X = pool(X, 2)
+Wdw2 = Parameter(C2, C2)
+X = relu(conv(X, Wdw2))
+Wpw2 = Parameter(C2, C3)
+X = relu(conv(X, Wpw2))
+X = pool(X, 2)
+Pooled = pool(X, 4)
+Wfc = Parameter(C3, 10)
+Logits = Pooled @ Wfc
+Probs = softmax(Logits)
+` },
+
+{ id: 'gru', name: 'GRU', cat: 'Recurrent', card: { full: 'GRU', year: '2014', params: 'varies', props: ['Gated recurrence', '3 gates', 'No cell state'], blurb: 'A lighter LSTM — reset/update gates, no separate cell state.' }, dsl:
+`# GRU — a lighter LSTM: reset & update gates, no separate cell state.
+# Six shared weights, unrolled over time (recurrence flows down the page).
+T = 4        # time steps
+D = 8
+H = 16
+
+X = Input(T, D)
+Wxr = Parameter(D, H)
+Whr = Parameter(H, H)
+Wxz = Parameter(D, H)
+Whz = Parameter(H, H)
+Wxn = Parameter(D, H)
+Whn = Parameter(H, H)
+
+State = Input(T, H)                  # h0
+for t in 0..4 {
+  Reset  = sigmoid(X @ Wxr + State @ Whr)            # reset gate
+  Update = sigmoid(X @ Wxz + State @ Whz)            # update gate
+  Cand   = tanh(X @ Wxn + (Reset * State) @ Whn)     # candidate
+  State  = State - Update * State + Update * Cand    # interpolate old/new
+}
+Wout = Parameter(H, 10)
+Logits = State @ Wout
+Probs = softmax(Logits)
+` },
+
+{ id: 'seq2seq', name: 'Seq2Seq', cat: 'Recurrent', card: { full: 'Seq2Seq + Attention', year: '2014', params: 'varies', props: ['Encoder–decoder RNN', 'Attention', 'Context vector'], blurb: 'Encoder RNN + decoder RNN that attends over encoder states.' }, dsl:
+`# Seq2Seq with attention — an encoder RNN reads the source; a decoder RNN
+# generates while ATTENDING over the encoder hidden states (Bahdanau-style).
+Tin = 6      # source length
+Tout = 5     # target length
+D = 8
+H = 16
+V = 12
+
+# ---- encoder RNN ----
+Src = Input(Tin, D)
+Wxe = Parameter(D, H)
+Whe = Parameter(H, H)
+EncState = Input(Tin, H)
+for t in 0..3 {
+  EncState = tanh(Src @ Wxe + EncState @ Whe)        # encoder hidden states
+}
+
+# ---- decoder RNN + attention over EncState ----
+Tgt = Input(Tout, D)
+Wxd = Parameter(D, H)
+Whd = Parameter(H, H)
+DecState = Input(Tout, H)
+for t in 0..3 {
+  DecState = tanh(Tgt @ Wxd + DecState @ Whd)
+  Score = softmax(DecState @ EncState.T)             # attention weights [Tout x Tin]
+  Context = Score @ EncState                          # context vector   [Tout x H]
+  DecState = DecState + Context
+}
+Wout = Parameter(H, V)
+Logits = DecState @ Wout
+Probs = softmax(Logits)
+` },
+
+{ id: 'mamba', name: 'Mamba', cat: 'State-Space', card: { full: 'Mamba (SSM)', year: '2023', params: 'varies', props: ['Selective SSM', 'No attention', 'Recurrent scan', 'Gated'], blurb: 'A selective state-space model — linear-time mixing, no attention.' }, dsl:
+`# Mamba — a selective STATE-SPACE model (no attention!). A gated branch selects
+# information; a recurrent scan mixes the sequence in linear time.
+T = 8
+C = 32
+E = 64       # expanded inner width
+V = 30
+
+X = Input(T, C)
+Wz = Parameter(C, E)
+Gate = sigmoid(X @ Wz)               # selective gate branch (SiLU)
+Wx = Parameter(C, E)
+U = X @ Wx                           # main branch  [T x E]
+Wconv = Parameter(E, E)
+Uc = relu(conv(U, Wconv))            # short causal conv
+# ---- selective SSM scan (state carried over time, no attention) ----
+WA = Parameter(E, E)
+WB = Parameter(E, E)
+Ssm = Input(T, E)
+for t in 0..4 {
+  Ssm = tanh(Uc @ WB + Ssm @ WA)     # state-space recurrence
+}
+Y = Ssm * Gate                       # gate the scan output
+Wout = Parameter(E, C)
+Out = X + Y @ Wout                   # residual
+Wcls = Parameter(C, V)
+Logits = Out @ Wcls
+Probs = softmax(Logits)
+` },
+
+{ id: 'autoencoder', name: 'Autoencoder', cat: 'Generative', card: { full: 'Autoencoder', year: '2006', params: 'varies', props: ['Encoder', 'Bottleneck', 'Decoder'], blurb: 'Compresses to a latent code then reconstructs — the hourglass.' }, dsl:
+`# Autoencoder — compress to a small latent CODE, then reconstruct. The blocks
+# narrow to the bottleneck and widen back out (the classic hourglass).
+T = 8        # batch of samples
+Din = 64
+H1 = 32
+H2 = 16
+Zd = 8       # latent (bottleneck)
+
+X = Input(T, Din)
+We1 = Parameter(Din, H1)
+E1 = relu(X @ We1)
+We2 = Parameter(H1, H2)
+E2 = relu(E1 @ We2)
+Wz = Parameter(H2, Zd)
+Code = E2 @ Wz                       # bottleneck latent
+Wd2 = Parameter(Zd, H2)
+D2 = relu(Code @ Wd2)
+Wd1 = Parameter(H2, H1)
+D1 = relu(D2 @ Wd1)
+Wout = Parameter(H1, Din)
+Recon = sigmoid(D1 @ Wout)           # reconstruction
+` },
+
+{ id: 'gan', name: 'GAN', cat: 'Generative', card: { full: 'GAN', year: '2014', params: 'varies', props: ['Generator', 'Discriminator', 'Adversarial'], blurb: 'A generator turns noise into data; a discriminator scores it real/fake.' }, dsl:
+`# GAN — a GENERATOR maps random noise to a sample; a DISCRIMINATOR scores it
+# real-vs-fake. Two networks trained adversarially (shown end-to-end here).
+T = 8        # batch
+Zd = 16      # latent noise
+Hg = 32
+Dim = 64     # data dimensionality
+Hd = 32
+
+Noise = Input(T, Zd)
+# ---- generator ----
+Wg1 = Parameter(Zd, Hg)
+G1 = relu(Noise @ Wg1)
+Wg2 = Parameter(Hg, Dim)
+Fake = tanh(G1 @ Wg2)                # generated sample  [T x Dim]
+# ---- discriminator ----
+Wd1 = Parameter(Dim, Hd)
+Dh = relu(Fake @ Wd1)
+Wd2 = Parameter(Hd, 1)
+Score = sigmoid(Dh @ Wd2)            # P(real)  [T x 1]
+` },
+
+{ id: 'clip', name: 'CLIP', cat: 'Generative', card: { full: 'CLIP', year: '2021', params: '400M', props: ['Dual encoder', 'Contrastive', 'Image + Text'], blurb: 'Separate image & text encoders aligned by a contrastive similarity matrix.' }, dsl:
+`# CLIP — TWO separate encoders (image + text) projected into a shared space,
+# aligned by a contrastive similarity matrix (image-text dot products).
+Ti = 8       # image patches
+Tt = 6       # text tokens
+Ci = 32
+Ct = 32
+Dz = 24      # shared embedding dim
+
+# ---- image tower ----
+Img = Input(Ti, Ci)
+Wi1 = Parameter(Ci, 64)
+Ih = relu(Img @ Wi1)
+Wi2 = Parameter(64, Dz)
+ImgEmb = Ih @ Wi2                    # [Ti x Dz]
+# ---- text tower ----
+Txt = Input(Tt, Ct)
+Wt1 = Parameter(Ct, 64)
+Th = relu(Txt @ Wt1)
+Wt2 = Parameter(64, Dz)
+TxtEmb = Th @ Wt2                    # [Tt x Dz]
+# ---- contrastive alignment ----
+Sim = softmax(ImgEmb @ TxtEmb.T)     # image-text similarity  [Ti x Tt]
+` },
+        ];
+
+        /* ---- Editor wiring: category → model subtabs, read-only cards, editable Custom tab ---- */
+        const srcEl = document.getElementById('e-src');
+        const catsEl = document.getElementById('e-cats'), tabsEl = document.getElementById('e-tabs');
+        const cardEl = document.getElementById('e-card'), srcModeEl = document.getElementById('e-srcmode'), copyEl = document.getElementById('e-copy');
+        const editorEl = document.getElementById('editor'), toggleEl = document.getElementById('e-toggle');
+        const CATS = [...new Set(MODELS.map(m => m.cat))];        // category order = first appearance
+        let activeCat = MODELS[0].cat, activeModel = MODELS[0].id, customDSL = MODELS[0].dsl;
+        const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        function renderCard(m) {
+            if (!m) { cardEl.innerHTML = ''; return; }
+            const c = m.card || {};
+            cardEl.innerHTML = `<h4>${esc(c.full || m.name)}</h4>`
+                + `<div class="meta">${[c.year, c.params].filter(Boolean).map(esc).join('  ·  ')}</div>`
+                + `<div class="props">${(c.props || []).map(p => `<span class="prop">${esc(p)}</span>`).join('')}</div>`
+                + (c.blurb ? `<div class="blurb">${esc(c.blurb)}</div>` : '');
+        }
+        function renderModels() {
+            tabsEl.innerHTML = '';
+            for (const m of MODELS.filter(m => m.cat === activeCat)) {
+                const t = document.createElement('div');
+                t.className = 'etab'; t.textContent = m.name; t.dataset.id = m.id; t.dataset.on = (m.id === activeModel && activeModel !== '__custom');
+                t.onclick = () => loadModel(m.id);
+                tabsEl.appendChild(t);
+            }
+        }
+        function renderCats() {
+            catsEl.innerHTML = '';
+            for (const cat of CATS) {
+                const c = document.createElement('div');
+                c.className = 'ecat'; c.textContent = cat; c.dataset.on = (cat === activeCat && activeModel !== '__custom');
+                c.onclick = () => { activeCat = cat; renderCats(); renderModels(); };
+                catsEl.appendChild(c);
+            }
+            const cust = document.createElement('div');                       // the editable Custom tab
+            cust.className = 'ecat'; cust.textContent = '✎ Custom'; cust.dataset.on = (activeModel === '__custom');
+            cust.onclick = () => loadCustom();
+            catsEl.appendChild(cust);
+        }
+
+        function loadModel(id) {
+            const m = MODELS.find(x => x.id === id) || MODELS[0];
+            activeModel = m.id; activeCat = m.cat;
+            srcEl.value = m.dsl; srcEl.readOnly = true;
+            srcModeEl.textContent = 'read-only preset'; copyEl.style.display = '';
+            renderCard(m); renderCats(); renderModels();
+            rebuild(m.dsl, true);          // switching models recenters the camera on the new model
+        }
+        function loadCustom(seed) {
+            if (seed != null) customDSL = seed;
+            activeModel = '__custom';
+            srcEl.value = customDSL; srcEl.readOnly = false;
+            srcModeEl.textContent = 'custom · editable'; copyEl.style.display = 'none';
+            cardEl.innerHTML = '<h4>Custom model</h4><div class="blurb">Edit the equations below — the 3D view updates live.</div>';
+            renderCats(); renderModels();
+            rebuild(customDSL, true);
+        }
+        copyEl.onclick = () => loadCustom(srcEl.value);   // copy the current preset into the editable Custom tab
+
+        toggleEl.onclick = () => { const open = editorEl.classList.toggle('collapsed') === false; toggleEl.textContent = open ? 'hide' : 'edit'; };
+        let debounceId = 0;
+        srcEl.addEventListener('input', () => {
+            if (activeModel !== '__custom') return;       // presets are read-only
+            customDSL = srcEl.value;
+            clearTimeout(debounceId); debounceId = setTimeout(() => rebuild(srcEl.value, false), 400);
+        });
+        // keep canvas shortcuts from firing while typing
+        srcEl.addEventListener('keydown', e => e.stopPropagation());
+
+        /* ===== RENDER LOOP ===== */
+        function handleResize() { renderer.setSize(window.innerWidth, window.innerHeight); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); }
+        window.addEventListener('resize', handleResize); handleResize();
+        let lastTime = performance.now();
+        function animate(now) {
+            const dt = Math.min(0.05, (now - lastTime) / 1000); lastTime = now;
+            if (autoOrbit) targetSpherical.th += dt * 0.15;
+            currentSpherical.th += (targetSpherical.th - currentSpherical.th) * 0.12;
+            currentSpherical.ph += (targetSpherical.ph - currentSpherical.ph) * 0.12;
+            currentSpherical.r += (targetSpherical.r - currentSpherical.r) * 0.12;
+            applyCameraPositions(); handlePicking(); renderer.render(scene, camera); requestAnimationFrame(animate);
+        }
+
+        // debug hook (for headless inspection; no effect on normal use)
+        window.__viz = { MODELS, loadModel, rebuild, targetSpherical, currentSpherical, targetPos, camera, get HOME() { return HOME_SPHERICAL; }, get blocks() { return blocks; }, get links() { return links; }, get SPAN() { return SPAN; }, get FIT() { return FIT; }, get labelInfo() { return { count: labelMesh ? labelMesh.count : 0, visible: labelMesh ? labelMesh.visible : false }; } };
+
+        loadModel(activeModel);
+        applyCameraPositions(); requestAnimationFrame(animate);
+        setTimeout(() => document.getElementById('loader').classList.add('done'), 350);
+    </script>
+</body>
+</html>
