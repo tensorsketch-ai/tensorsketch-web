@@ -1,0 +1,50 @@
+name: deploy
+
+# Deploys tensorsketch.space to Vercel (production) on every push to main.
+# You can also trigger it by hand from the Actions tab (workflow_dispatch).
+#
+# Requires three repository secrets (Settings → Secrets and variables → Actions):
+#   VERCEL_TOKEN        a Vercel access token   (https://vercel.com/account/tokens)
+#   VERCEL_ORG_ID       your Vercel team/org id \ both are written into .vercel/project.json
+#   VERCEL_PROJECT_ID   this project's id       / when you run `vercel link` once, locally
+#
+# The Vercel project must exist first (run `vercel link` in this repo, or import it once in the
+# Vercel dashboard) — that's what gives you the ORG and PROJECT ids.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two production deploys at once; newer pushes win.
+concurrency:
+  group: vercel-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to Vercel (production)
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel project settings
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build the static site
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy prebuilt output to production
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
