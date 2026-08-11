@@ -31,27 +31,58 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # A token deploy shouldn't be gated on who authored the commit. The Vercel CLI reads the
-      # local .git to attach commit metadata, and on the Hobby plan Vercel blocks the deploy unless
-      # that commit's author maps to a GitHub account on the team. Removing .git means no metadata
-      # is sent, so there is nothing to block on — the token alone authorizes the deploy.
+      # A token deploy shouldn't be gated on who authored the commit. On the Hobby plan Vercel
+      # blocks a deploy whose commit author can't be matched to a GitHub account on the team.
+      # Removing .git isn't enough on its own: inside GitHub Actions the Vercel CLI rebuilds the
+      # git association from the GITHUB_* env vars (it resolves the author from GITHUB_SHA against
+      # the linked repo). So we strip .git *and* blank those variables on the Vercel steps below —
+      # leaving no commit for Vercel to gate on, so the token alone authorizes the deploy.
       - name: Strip git metadata (deploy by token only)
         run: rm -rf .git
 
       - name: Install the Vercel CLI
         run: npm install --global vercel@latest
 
+      # Blank the git association on each Vercel step so no commit author is attached (see note
+      # above). Kept explicit per step rather than via a YAML anchor to avoid any parser surprises.
       - name: Pull Vercel project settings
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          GITHUB_SHA: ""
+          GITHUB_REF: ""
+          GITHUB_REF_NAME: ""
+          GITHUB_HEAD_REF: ""
+          GITHUB_REPOSITORY: ""
+          GITHUB_REPOSITORY_OWNER: ""
+          GITHUB_ACTOR: ""
+          GITHUB_EVENT_NAME: ""
+          GITHUB_EVENT_PATH: ""
 
       - name: Build the static site
         run: vercel build --prod --token="$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          GITHUB_SHA: ""
+          GITHUB_REF: ""
+          GITHUB_REF_NAME: ""
+          GITHUB_HEAD_REF: ""
+          GITHUB_REPOSITORY: ""
+          GITHUB_REPOSITORY_OWNER: ""
+          GITHUB_ACTOR: ""
+          GITHUB_EVENT_NAME: ""
+          GITHUB_EVENT_PATH: ""
 
       - name: Deploy prebuilt output to production
         run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          GITHUB_SHA: ""
+          GITHUB_REF: ""
+          GITHUB_REF_NAME: ""
+          GITHUB_HEAD_REF: ""
+          GITHUB_REPOSITORY: ""
+          GITHUB_REPOSITORY_OWNER: ""
+          GITHUB_ACTOR: ""
+          GITHUB_EVENT_NAME: ""
+          GITHUB_EVENT_PATH: ""
