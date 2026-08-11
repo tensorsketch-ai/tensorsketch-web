@@ -59,19 +59,24 @@ jobs:
           GITHUB_EVENT_NAME: ""
           GITHUB_EVENT_PATH: ""
 
-      - name: Build the static site
-        run: vercel build --prod --token="$VERCEL_TOKEN"
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          GITHUB_SHA: ""
-          GITHUB_REF: ""
-          GITHUB_REF_NAME: ""
-          GITHUB_HEAD_REF: ""
-          GITHUB_REPOSITORY: ""
-          GITHUB_REPOSITORY_OWNER: ""
-          GITHUB_ACTOR: ""
-          GITHUB_EVENT_NAME: ""
-          GITHUB_EVENT_PATH: ""
+      # Bypass `vercel build` — it kept producing an empty static output for this plain
+      # root-level static site (framework/output-dir detection). Instead we hand-assemble the
+      # Build Output API v3 layout ourselves: copy the site files into .vercel/output/static and
+      # write a config.json carrying cleanUrls / trailingSlash / the same headers as vercel.json.
+      # This cannot ship an empty deploy because we place the files directly.
+      - name: Assemble the prebuilt static output
+        run: |
+          set -euo pipefail
+          rm -rf .vercel/output
+          mkdir -p .vercel/output/static
+          rsync -a \
+            --exclude='.git' --exclude='.github' --exclude='.vercel' \
+            --exclude='vercel.json' --exclude='README.md' --exclude='.gitignore' \
+            ./ .vercel/output/static/
+          printf '%s' '{"version":3,"cleanUrls":true,"trailingSlash":false,"routes":[{"src":"^/assets/(.*)$","headers":{"cache-control":"public, max-age=31536000, immutable"},"continue":true},{"src":"^/(.*)$","headers":{"x-content-type-options":"nosniff","referrer-policy":"strict-origin-when-cross-origin"},"continue":true}]}' > .vercel/output/config.json
+          echo "--- static output (root) ---"; ls -la .vercel/output/static
+          test -f .vercel/output/static/index.html
+          test -f .vercel/output/static/docs/index.html
 
       - name: Deploy prebuilt output to production
         run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
